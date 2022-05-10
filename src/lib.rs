@@ -26,13 +26,13 @@ impl<'a> DynamixelControl<'a> {
     pub fn ping(&mut self, id: u8) {
         // 👺結果を返すようにする
         // For Model Number 1030(0x0406), Version of Firmware 38(0x26)
-        let length = 1 + 2;     // instruction + crc
+        let length: u16 = 1 + 2;     // instruction + crc
         let mut msg = Vec::<u8, 256>::new();
         msg.extend(self.make_msg_header().iter().cloned());
         msg.push(id).unwrap();
-        msg.extend(self.u16_to_u8(length).iter().cloned());       // Set length temporary
+        msg.extend(length.to_le_bytes().iter().cloned());       // Set length temporary
         msg.push(self.instruction_value(Instruction::Ping)).unwrap();
-        msg.extend(self.u16_to_u8(self.calc_crc_value(&msg)).iter().cloned());
+        msg.extend(self.calc_crc_value(&msg).to_le_bytes().iter().cloned());
 
         for m in msg {
             self.uart.write_byte(m);
@@ -48,15 +48,15 @@ impl<'a> DynamixelControl<'a> {
         let mut msg = Vec::<u8, 256>::new();
         msg.extend(self.make_msg_header().iter().cloned());
         msg.push(id).unwrap();
-        msg.extend(self.u16_to_u8(length).iter().cloned());       // Set length temporary
+        msg.extend(length.to_le_bytes().iter().cloned());       // Set length temporary
         msg.push(self.instruction_value(Instruction::Write)).unwrap();
-        msg.extend(self.u16_to_u8(address).iter().cloned());
+        msg.extend(address.to_le_bytes().iter().cloned());
 
         for d in data {
             msg.push(*d).unwrap();
         }
 
-        msg.extend(self.u16_to_u8(self.calc_crc_value(&msg)).iter().cloned());
+        msg.extend(self.calc_crc_value(&msg).to_le_bytes().iter().cloned());
 
         for m in msg {
             self.uart.write_byte(m);
@@ -135,10 +135,6 @@ impl<'a> DynamixelControl<'a> {
         }
     
         crc_accum
-    }
-
-    fn u16_to_u8(&self, data: u16) -> [u8; 2] {
-        [(data & 0x00FF) as u8, ((data >> 8) & 0x00FF) as u8]
     }
 
 }
@@ -227,9 +223,7 @@ mod tests {
 
     #[test]    
     fn u16_to_u8() {
-        let mut mock_uart = MockSerial::new();
-        let dxl = DynamixelControl::new(&mut mock_uart);
-        assert_eq!(dxl.u16_to_u8(0xFBFA), [0xFA, 0xFB]);    
+        assert_eq!((0xFBFA as u16).to_le_bytes() , [0xFA, 0xFB]);    
     }
 
 
