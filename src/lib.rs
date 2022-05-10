@@ -27,7 +27,8 @@ impl<'a> DynamixelControl<'a> {
         // 👺結果を返すようにする
         // For Model Number 1030(0x0406), Version of Firmware 38(0x26)
         let length = 1 + 2;     // instruction + crc
-        let mut msg = self.make_msg_header();
+        let mut msg = Vec::<u8, 256>::new();
+        msg.extend(self.make_msg_header().iter().cloned());
         msg.push(id).unwrap();
         msg.extend(self.u16_to_u8(length).iter().cloned());       // Set length temporary
         msg.push(self.instruction_value(Instruction::Ping)).unwrap();
@@ -44,10 +45,11 @@ impl<'a> DynamixelControl<'a> {
 
     pub fn write(&mut self, id: u8, address: u16, data: &[u8]) {
         let length = 1 + 2 + (data.len() as u16) + 2;     // instruction + adress + data + crc
-        let mut msg = self.make_msg_header();
+        let mut msg = Vec::<u8, 256>::new();
+        msg.extend(self.make_msg_header().iter().cloned());
         msg.push(id).unwrap();
         msg.extend(self.u16_to_u8(length).iter().cloned());       // Set length temporary
-        msg.push(self.instruction_value(Instruction::Ping)).unwrap();
+        msg.push(self.instruction_value(Instruction::Write)).unwrap();
         msg.extend(self.u16_to_u8(address).iter().cloned());
 
         for d in data {
@@ -63,10 +65,8 @@ impl<'a> DynamixelControl<'a> {
 
 
 
-    fn make_msg_header(&self) -> Vec<u8, 256> {
-        let mut msg = Vec::<u8, 256>::new();
-        msg.extend([0xFF, 0xFF, 0xFD, 0x00].iter().cloned());     // Header and reserved
-        msg
+    fn make_msg_header(&self) -> [u8; 4] {
+        [0xFF, 0xFF, 0xFD, 0x00]     // Header and reserved
     }
 
     fn instruction_value(&self, instruction: Instruction) -> u8{
@@ -180,7 +180,7 @@ mod tests {
             self.buf.push(data).unwrap();
         }
     }
-    
+
     #[test]    
     fn torque_enable_xc330() {
         // 👺crc以外をテストするように変更したい
@@ -204,6 +204,16 @@ mod tests {
         let mut dxl = DynamixelControl::new(&mut mock_uart);
         dxl.ping(1);
         assert_eq!(*mock_uart.buf, [0xFF, 0xFF, 0xFD, 0x00, 0x01, 0x03, 0x00, 0x01, 0x19, 0x4E]);    
+    }
+
+    #[test]    
+    fn write() {
+        // ID1(XM430-W210) : Write 512(0x00000200) to Goal Position(116, 0x0074, 4[byte])
+        let mut mock_uart = MockSerial::new();
+        let mut dxl = DynamixelControl::new(&mut mock_uart);
+        let data = [0x00, 0x02, 0x00, 0x00];
+        dxl.write(1, 0x0074, &data);
+        assert_eq!(*mock_uart.buf, [0xFF, 0xFF, 0xFD, 0x00, 0x01, 0x09, 0x00, 0x03, 0x74, 0x00, 0x00, 0x02, 0x00, 0x00, 0xCA, 0x89]);    
     }
 
     #[test]    
