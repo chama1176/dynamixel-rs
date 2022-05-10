@@ -26,9 +26,10 @@ impl<'a> DynamixelControl<'a> {
     pub fn ping(&mut self, id: u8) {
         // 👺結果を返すようにする
         // For Model Number 1030(0x0406), Version of Firmware 38(0x26)
+        let length = 1 + 2;     // instruction + crc
         let mut msg = self.make_msg_header();
         msg.push(id).unwrap();
-        msg.extend(self.u16_to_u8(3).iter().cloned());       // Set length temporary
+        msg.extend(self.u16_to_u8(length).iter().cloned());       // Set length temporary
         msg.push(self.instruction_value(Instruction::Ping)).unwrap();
         msg.extend(self.u16_to_u8(self.calc_crc_value(&msg)).iter().cloned());
 
@@ -36,6 +37,31 @@ impl<'a> DynamixelControl<'a> {
             self.uart.write_byte(m);
         }
     }
+
+    pub fn read(&mut self, id: u8) {
+
+    }
+
+    pub fn write(&mut self, id: u8, address: u16, data: &[u8]) {
+        let length = 1 + 2 + (data.len() as u16) + 2;     // instruction + adress + data + crc
+        let mut msg = self.make_msg_header();
+        msg.push(id).unwrap();
+        msg.extend(self.u16_to_u8(length).iter().cloned());       // Set length temporary
+        msg.push(self.instruction_value(Instruction::Ping)).unwrap();
+        msg.extend(self.u16_to_u8(address).iter().cloned());
+
+        for d in data {
+            msg.push(*d).unwrap();
+        }
+
+        msg.extend(self.u16_to_u8(self.calc_crc_value(&msg)).iter().cloned());
+
+        for m in msg {
+            self.uart.write_byte(m);
+        }        
+    }
+
+
 
     fn make_msg_header(&self) -> Vec<u8, 256> {
         let mut msg = Vec::<u8, 256>::new();
@@ -157,6 +183,15 @@ mod tests {
     
     #[test]    
     fn torque_enable_xc330() {
+        // 👺crc以外をテストするように変更したい
+        let mut mock_uart = MockSerial::new();
+        let mut dxl = DynamixelControl::new(&mut mock_uart);
+        dxl.torque_enable(true);
+        assert_eq!(*mock_uart.buf, [0xFF, 0x6f, 0x6c, 0x61]);    
+    }
+
+    #[test]    
+    fn set_led_xc330() {
         let mut mock_uart = MockSerial::new();
         let mut dxl = DynamixelControl::new(&mut mock_uart);
         dxl.torque_enable(true);
@@ -169,6 +204,15 @@ mod tests {
         let mut dxl = DynamixelControl::new(&mut mock_uart);
         dxl.ping(1);
         assert_eq!(*mock_uart.buf, [0xFF, 0xFF, 0xFD, 0x00, 0x01, 0x03, 0x00, 0x01, 0x19, 0x4E]);    
+    }
+
+    #[test]    
+    fn crc() {
+        let mut mock_uart = MockSerial::new();
+        let dxl = DynamixelControl::new(&mut mock_uart);
+        let mut msg = Vec::<u8, 256>::new();
+        msg.extend([0xFF, 0xFF, 0xFD, 0x00, 0x01, 0x07, 0x00, 0x55, 0x00, 0x06, 0x04, 0x26].iter().cloned());
+        assert_eq!(dxl.calc_crc_value(&msg), 0x5D65);    
     }
 
     #[test]    
