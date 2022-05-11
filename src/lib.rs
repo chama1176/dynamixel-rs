@@ -207,8 +207,8 @@ mod tests {
         // ID1(XM430-W210) : Write 512(0x00000200) to Goal Position(116, 0x0074, 4[byte])
         let mut mock_uart = MockSerial::new();
         let mut dxl = DynamixelControl::new(&mut mock_uart);
-        let data = [0x00, 0x02, 0x00, 0x00];
-        dxl.write(1, 0x0074, &data);
+        let data: u32 = 0x00000200;
+        dxl.write(1, 0x0074, &data.to_le_bytes());
         assert_eq!(*mock_uart.buf, [0xFF, 0xFF, 0xFD, 0x00, 0x01, 0x09, 0x00, 0x03, 0x74, 0x00, 0x00, 0x02, 0x00, 0x00, 0xCA, 0x89]);    
     }
 
