@@ -1,6 +1,7 @@
 #![no_std]
 use heapless::Vec;
 mod control_table;
+use control_table::ControlTable;
 
 pub trait Interface {
     fn write_byte(&mut self, data: u8);
@@ -64,7 +65,9 @@ impl<'a> DynamixelControl<'a> {
         }        
     }
 
-
+    pub fn set_led(&mut self, id: u8, data: u8) {
+        self.write(id, ControlTable::LED.to_address(), &[data]);
+    }
 
     fn make_msg_header(&self) -> [u8; 4] {
         [0xFF, 0xFF, 0xFD, 0x00]     // Header and reserved
@@ -180,7 +183,6 @@ mod tests {
 
     #[test]    
     fn torque_enable_xc330() {
-        // 👺crc以外をテストするように変更したい
         let mut mock_uart = MockSerial::new();
         let mut dxl = DynamixelControl::new(&mut mock_uart);
         dxl.torque_enable(true);
@@ -191,8 +193,9 @@ mod tests {
     fn set_led_xc330() {
         let mut mock_uart = MockSerial::new();
         let mut dxl = DynamixelControl::new(&mut mock_uart);
-        dxl.torque_enable(true);
-        assert_eq!(*mock_uart.buf, [0xFF, 0x6f, 0x6c, 0x61]);    
+        dxl.set_led(1, 1);
+        // crc以外をテスト
+        assert_eq!(mock_uart.buf[..11], [0xFF, 0xFF, 0xFD, 0x00, 0x01, 0x06, 0x00, 0x03, 65, 0x00, 0x01]);    
     }
 
     #[test]    

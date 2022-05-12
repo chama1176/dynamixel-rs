@@ -102,7 +102,7 @@ pub enum ControlTable {
 
 #[allow(dead_code)]
 impl ControlTable {
-    fn to_address(&self) -> u16 {
+    pub fn to_address(&self) -> u16 {
         match self {
             ControlTable::ModelNumber => 0,
             ControlTable::ModelInformation => 2,
@@ -201,7 +201,7 @@ impl ControlTable {
         }
     }
 
-    fn to_size(&self) -> u16 {
+    pub fn to_size(&self) -> u16 {
         match self {
             ControlTable::ModelNumber => 2,
             ControlTable::ModelInformation => 4,
@@ -300,7 +300,7 @@ impl ControlTable {
         }
     }
 
-    fn to_unit(&self) -> f32 {
+    pub fn to_unit(&self) -> f32 {
         match self {
             ControlTable::ModelNumber => 1.0,
             ControlTable::ModelInformation => 1.0,
