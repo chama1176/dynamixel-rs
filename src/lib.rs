@@ -1,5 +1,6 @@
 #![no_std]
 use heapless::Vec;
+mod control_table;
 
 pub trait Interface {
     fn write_byte(&mut self, data: u8);
