@@ -2,9 +2,11 @@
 use heapless::Vec;
 mod control_table;
 use control_table::ControlTable;
+use core::result::Result;
 
 pub trait Interface {
     fn write_byte(&mut self, data: u8);
+    fn read(&mut self, data: &mut [u8]);
 }
 
 pub struct DynamixelControl<'a> {
@@ -18,6 +20,10 @@ impl<'a> DynamixelControl<'a> {
         Self { uart, is_enabled: false }
     }
 
+    pub fn set_led(&mut self, id: u8, data: u8) {
+        self.write(id, ControlTable::LED.to_address(), &[data]);
+    }
+
     pub fn torque_enable(&mut self, enabled: bool) {
         self.uart.write_byte(0xFF);
         self.uart.write_byte(0x6f);
@@ -25,7 +31,7 @@ impl<'a> DynamixelControl<'a> {
         self.uart.write_byte(0x61);
     }
 
-    pub fn ping(&mut self, id: u8) {
+    pub fn ping(&mut self, id: u8) -> (u16, u8) {
         // 👺結果を返すようにする
         // For Model Number 1030(0x0406), Version of Firmware 38(0x26)
         let length: u16 = 1 + 2;     // instruction + crc
@@ -33,12 +39,19 @@ impl<'a> DynamixelControl<'a> {
         msg.extend(self.make_msg_header().iter().cloned());
         msg.push(id).unwrap();
         msg.extend(length.to_le_bytes().iter().cloned());       // Set length temporary
-        msg.push(self.instruction_value(Instruction::Ping)).unwrap();
+        msg.push(Instruction::Ping.to_value()).unwrap();
         msg.extend(self.calc_crc_value(&msg).to_le_bytes().iter().cloned());
 
         for m in msg {
             self.uart.write_byte(m);
         }
+
+        let mut status = [0; 128];
+        self.uart.read(&mut status);
+        let model_number = u16::from_le_bytes([status[9], status[10]]);
+        let firmware_version = status[11];
+        (model_number, firmware_version)
+
     }
 
     pub fn read(&mut self, id: u8) {
@@ -51,7 +64,7 @@ impl<'a> DynamixelControl<'a> {
         msg.extend(self.make_msg_header().iter().cloned());
         msg.push(id).unwrap();
         msg.extend(length.to_le_bytes().iter().cloned());       // Set length temporary
-        msg.push(self.instruction_value(Instruction::Write)).unwrap();
+        msg.push(Instruction::Write.to_value()).unwrap();
         msg.extend(address.to_le_bytes().iter().cloned());
 
         for d in data {
@@ -65,33 +78,8 @@ impl<'a> DynamixelControl<'a> {
         }        
     }
 
-    pub fn set_led(&mut self, id: u8, data: u8) {
-        self.write(id, ControlTable::LED.to_address(), &[data]);
-    }
-
     fn make_msg_header(&self) -> [u8; 4] {
         [0xFF, 0xFF, 0xFD, 0x00]     // Header and reserved
-    }
-
-    fn instruction_value(&self, instruction: Instruction) -> u8{
-        match instruction {
-            Instruction::Ping => 0x01,
-            Instruction::Read => 0x02,
-            Instruction::Write => 0x03,
-            Instruction::RegWrite => 0x04,
-            Instruction::Action => 0x05,
-            Instruction::FactoryReset => 0x06,
-            Instruction::Reboot => 0x08,
-            Instruction::Clear => 0x10,
-            Instruction::ControlTableBackup => 0x20,
-            Instruction::Status => 0x55,
-            Instruction::SyncRead => 0x82,
-            Instruction::SyncWrite => 0x83,
-            Instruction::FastSyncRead => 0x8A,
-            Instruction::BulkRead => 0x92,
-            Instruction::BulkWrite => 0x93,
-            Instruction::FastBulkRead => 0x9A,
-        }
     }
 
     fn calc_crc_value(&self, msg: &Vec<u8, 256>) -> u16 {
@@ -162,10 +150,34 @@ pub enum Instruction {
     FastBulkRead, 
 }
 
+impl Instruction {
+    pub fn to_value(&self) -> u8 {
+        match self {
+            Instruction::Ping => 0x01,
+            Instruction::Read => 0x02,
+            Instruction::Write => 0x03,
+            Instruction::RegWrite => 0x04,
+            Instruction::Action => 0x05,
+            Instruction::FactoryReset => 0x06,
+            Instruction::Reboot => 0x08,
+            Instruction::Clear => 0x10,
+            Instruction::ControlTableBackup => 0x20,
+            Instruction::Status => 0x55,
+            Instruction::SyncRead => 0x82,
+            Instruction::SyncWrite => 0x83,
+            Instruction::FastSyncRead => 0x8A,
+            Instruction::BulkRead => 0x92,
+            Instruction::BulkWrite => 0x93,
+            Instruction::FastBulkRead => 0x9A,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use heapless::Vec;
     use crate::DynamixelControl;
+    use crate::Instruction;
 
     pub struct MockSerial {
         buf: Vec<u8, 256>,
@@ -178,6 +190,14 @@ mod tests {
     impl crate::Interface for MockSerial {
         fn write_byte(&mut self, data: u8) {
             self.buf.push(data).unwrap();
+        }
+        fn read(&mut self, data: &mut [u8]) {
+
+            let res = [0xFF, 0xFF, 0xFD, 0x00, 0x01, 0x07, 0x00, 0x55, 0x00, 0x06, 0x04, 0x26, 0x65, 0x5D];
+
+            for i in 0..res.len() {
+                data[i] = res[i]
+            }
         }
     }
 
@@ -202,8 +222,10 @@ mod tests {
     fn ping() {
         let mut mock_uart = MockSerial::new();
         let mut dxl = DynamixelControl::new(&mut mock_uart);
-        dxl.ping(1);
-        assert_eq!(*mock_uart.buf, [0xFF, 0xFF, 0xFD, 0x00, 0x01, 0x03, 0x00, 0x01, 0x19, 0x4E]);    
+        let (model_number, firmware_version) = dxl.ping(1);
+        assert_eq!(*mock_uart.buf, [0xFF, 0xFF, 0xFD, 0x00, 0x01, 0x03, 0x00, 0x01, 0x19, 0x4E]);
+        assert_eq!(model_number, 0x0406);
+        assert_eq!(firmware_version, 0x26);
     }
 
     #[test]    
