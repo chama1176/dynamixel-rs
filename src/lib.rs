@@ -1,4 +1,6 @@
 #![no_std]
+//! This crate is for control dynamixel.
+//! 
 use heapless::Vec;
 mod control_table;
 use control_table::ControlTable;
@@ -31,9 +33,8 @@ impl<'a> DynamixelControl<'a> {
         self.uart.write_byte(0x61);
     }
 
+    /// 👺Broadcast is not implemented yet.
     pub fn ping(&mut self, id: u8) -> (u16, u8) {
-        // 👺結果を返すようにする
-        // For Model Number 1030(0x0406), Version of Firmware 38(0x26)
         let length: u16 = 1 + 2;     // instruction + crc
         let mut msg = Vec::<u8, 256>::new();
         msg.extend(self.make_msg_header().iter().cloned());
@@ -51,10 +52,9 @@ impl<'a> DynamixelControl<'a> {
         let model_number = u16::from_le_bytes([status[9], status[10]]);
         let firmware_version = status[11];
         (model_number, firmware_version)
-
     }
 
-    pub fn read(&mut self, id: u8) {
+    pub fn read(&mut self, id: u8, data: &mut [u8]) {
 
     }
 
@@ -193,10 +193,13 @@ mod tests {
         }
         fn read(&mut self, data: &mut [u8]) {
 
-            let res = [0xFF, 0xFF, 0xFD, 0x00, 0x01, 0x07, 0x00, 0x55, 0x00, 0x06, 0x04, 0x26, 0x65, 0x5D];
-
-            for i in 0..res.len() {
-                data[i] = res[i]
+            if self.buf[7] == Instruction::Ping.to_value() {
+                // ID1(XM430-W210) : For Model Number 1030(0x0406), Version of Firmware 38(0x26)
+                // Instruction Packet ID : 1
+                let res = [0xFF, 0xFF, 0xFD, 0x00, 0x01, 0x07, 0x00, 0x55, 0x00, 0x06, 0x04, 0x26, 0x65, 0x5D];
+                for i in 0..res.len() {
+                    data[i] = res[i]
+                }    
             }
         }
     }
@@ -220,6 +223,8 @@ mod tests {
 
     #[test]    
     fn ping() {
+        // ID1(XM430-W210) : For Model Number 1030(0x0406), Version of Firmware 38(0x26)
+        // Instruction Packet ID : 1
         let mut mock_uart = MockSerial::new();
         let mut dxl = DynamixelControl::new(&mut mock_uart);
         let (model_number, firmware_version) = dxl.ping(1);

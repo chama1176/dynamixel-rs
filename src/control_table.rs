@@ -405,11 +405,22 @@ impl ControlTable {
 #[cfg(test)]
 mod tests {
     use crate::control_table::ControlTable;
-
     #[test]    
     fn to_address_xc330() {
         let name = ControlTable::ModelNumber;
         assert_eq!(name.to_address(), 0);
         assert_eq!(ControlTable::TorqueEnable.to_address(), 64)
+    }
+    #[test]    
+    fn to_size_xc330() {
+        let name = ControlTable::ModelNumber;
+        assert_eq!(name.to_size(), 2);
+        assert_eq!(ControlTable::TorqueEnable.to_size(), 1);
+    }
+    #[test]    
+    fn to_unit_xc330() {
+        let name = ControlTable::ModelNumber;
+        assert_eq!(name.to_unit(), 1.0);
+        assert_eq!(ControlTable::PresentPWM.to_unit(), 0.113);
     }
 }
