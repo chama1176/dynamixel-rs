@@ -8,7 +8,7 @@ use core::result::Result;
 
 pub trait Interface {
     fn write_byte(&mut self, data: u8);
-    fn read(&mut self, data: &mut [u8]);
+    fn read(&mut self, data: &mut [u8]) -> usize;
 }
 
 pub struct DynamixelControl<'a> {
@@ -34,6 +34,7 @@ impl<'a> DynamixelControl<'a> {
     }
 
     /// 👺Broadcast is not implemented yet.
+    /// 👺型をちゃんとモデルナンバーとファームバージョンにした方がいいかも
     pub fn ping(&mut self, id: u8) -> (u16, u8) {
         let length: u16 = 1 + 2;     // instruction + crc
         let mut msg = Vec::<u8, 256>::new();
@@ -47,19 +48,37 @@ impl<'a> DynamixelControl<'a> {
             self.uart.write_byte(m);
         }
 
-        let mut status = [0; 128];
-        self.uart.read(&mut status);
-        let model_number = u16::from_le_bytes([status[9], status[10]]);
-        let firmware_version = status[11];
-        (model_number, firmware_version)
+        let mut status = [0; 14];
+        if self.uart.read(&mut status) == 14 {
+            let model_number = u16::from_le_bytes([status[9], status[10]]);
+            let firmware_version = status[11];
+            (model_number, firmware_version)    
+        } else {
+            (0, 0)
+        }
     }
 
-    pub fn read(&mut self, id: u8, data: &mut [u8]) {
+    pub fn read(&mut self, id: u8, address: u16, size: u16, data: &mut [u8]) {
+        let length: u16 = 1 + 2 + 2 + 2;     // instruction + adress + data length + crc
+        let mut msg = Vec::<u8, 256>::new();
+        msg.extend(self.make_msg_header().iter().cloned());
+        msg.push(id).unwrap();
+        msg.extend(length.to_le_bytes().iter().cloned());       // Set length temporary
+        msg.push(Instruction::Read.to_value()).unwrap();
+        msg.extend(address.to_le_bytes().iter().cloned());
+        msg.extend(size.to_le_bytes().iter().cloned());
+
+        msg.extend(self.calc_crc_value(&msg).to_le_bytes().iter().cloned());
+
+        for m in msg {
+            self.uart.write_byte(m);
+        }
+
 
     }
 
     pub fn write(&mut self, id: u8, address: u16, data: &[u8]) {
-        let length = 1 + 2 + (data.len() as u16) + 2;     // instruction + adress + data + crc
+        let length: u16 = 1 + 2 + (data.len() as u16) + 2;     // instruction + adress + data + crc
         let mut msg = Vec::<u8, 256>::new();
         msg.extend(self.make_msg_header().iter().cloned());
         msg.push(id).unwrap();
@@ -75,7 +94,8 @@ impl<'a> DynamixelControl<'a> {
 
         for m in msg {
             self.uart.write_byte(m);
-        }        
+        }
+        // self.uart.read()
     }
 
     fn make_msg_header(&self) -> [u8; 4] {
@@ -191,16 +211,19 @@ mod tests {
         fn write_byte(&mut self, data: u8) {
             self.buf.push(data).unwrap();
         }
-        fn read(&mut self, data: &mut [u8]) {
+        fn read(&mut self, data: &mut [u8]) -> usize {
 
+            let mut size = 0;
             if self.buf[7] == Instruction::Ping.to_value() {
                 // ID1(XM430-W210) : For Model Number 1030(0x0406), Version of Firmware 38(0x26)
                 // Instruction Packet ID : 1
                 let res = [0xFF, 0xFF, 0xFD, 0x00, 0x01, 0x07, 0x00, 0x55, 0x00, 0x06, 0x04, 0x26, 0x65, 0x5D];
                 for i in 0..res.len() {
-                    data[i] = res[i]
+                    data[i] = res[i];
                 }    
+                size = res.len();
             }
+            size
         }
     }
 
@@ -231,6 +254,16 @@ mod tests {
         assert_eq!(*mock_uart.buf, [0xFF, 0xFF, 0xFD, 0x00, 0x01, 0x03, 0x00, 0x01, 0x19, 0x4E]);
         assert_eq!(model_number, 0x0406);
         assert_eq!(firmware_version, 0x26);
+    }
+
+    #[test]    
+    fn read() {
+        // ID1(XM430-W210) : Present Position(132, 0x0084, 4[byte]) = 166(0x000000A6)
+        let mut mock_uart = MockSerial::new();
+        let mut dxl = DynamixelControl::new(&mut mock_uart);
+        let mut data = [0; 1];
+        dxl.read(1, 132, 4, &mut data);
+        assert_eq!(*mock_uart.buf, [0xFF, 0xFF, 0xFD, 0x00, 0x01, 0x07, 0x00, 0x02, 0x84, 0x00, 0x04, 0x00, 0x1D, 0x15]);    
     }
 
     #[test]    
