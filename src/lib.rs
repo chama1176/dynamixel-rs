@@ -8,7 +8,7 @@ use core::result::Result;
 
 pub trait Interface {
     fn write_byte(&mut self, data: u8);
-    fn read(&mut self, data: &mut [u8]) -> usize;
+    fn read(&mut self) -> Option<u8>;
 }
 
 pub struct DynamixelControl<'a> {
@@ -48,14 +48,23 @@ impl<'a> DynamixelControl<'a> {
             self.uart.write_byte(m);
         }
 
-        let mut status = [0; 14];
-        if self.uart.read(&mut status) == 14 {
+        let mut status = Vec::<u8, 128>::new();
+        for _i in 0..14 {
+            match self.uart.read() {
+                None => {},
+                Some(data) => {
+                    status.push(data).unwrap();
+                },
+            }
+        }
+        if status.len() == 14 {
             let model_number = u16::from_le_bytes([status[9], status[10]]);
             let firmware_version = status[11];
-            (model_number, firmware_version)    
+            (model_number, firmware_version)
         } else {
-            (0, 0)
+            (0,0)
         }
+
     }
 
     pub fn read(&mut self, id: u8, address: u16, size: u16, data: &mut [u8]) {
@@ -73,7 +82,6 @@ impl<'a> DynamixelControl<'a> {
         for m in msg {
             self.uart.write_byte(m);
         }
-
 
     }
 
@@ -195,35 +203,49 @@ impl Instruction {
 
 #[cfg(test)]
 mod tests {
+    use heapless::Deque;
     use heapless::Vec;
     use crate::DynamixelControl;
     use crate::Instruction;
+    use crate::ControlTable;
 
     pub struct MockSerial {
-        buf: Vec<u8, 256>,
+        rx_buf: Vec<u8, 256>,
+        tx_buf: Deque<u8, 256>,
     }
     impl MockSerial {
         pub fn new() -> Self {
-            Self { buf: Vec::<u8, 256>::new()}
+            Self { 
+                rx_buf: Vec::<u8, 256>::new(), 
+                tx_buf: Deque::<u8, 256>::new(), 
+            }
         }
     }
     impl crate::Interface for MockSerial {
         fn write_byte(&mut self, data: u8) {
-            self.buf.push(data).unwrap();
-        }
-        fn read(&mut self, data: &mut [u8]) -> usize {
+            
+            self.rx_buf.push(data).unwrap();
 
-            let mut size = 0;
-            if self.buf[7] == Instruction::Ping.to_value() {
+            // For test ping
+            if self.rx_buf.len() > 7 && self.rx_buf[7] == Instruction::Ping.to_value() {
                 // ID1(XM430-W210) : For Model Number 1030(0x0406), Version of Firmware 38(0x26)
                 // Instruction Packet ID : 1
                 let res = [0xFF, 0xFF, 0xFD, 0x00, 0x01, 0x07, 0x00, 0x55, 0x00, 0x06, 0x04, 0x26, 0x65, 0x5D];
-                for i in 0..res.len() {
-                    data[i] = res[i];
-                }    
-                size = res.len();
+                for data in res{
+                    self.tx_buf.push_back(data).unwrap();
+                }
             }
-            size
+            // For test read
+            if self.rx_buf.len() > 7 && self.rx_buf[7] == Instruction::Read.to_value() {
+                // ID1(XM430-W210) : Present Position(132, 0x0084, 4[byte]) = 166(0x000000A6)
+                let res = [0xFF, 0xFF, 0xFD, 0x00, 0x01, 0x07, 0x00, 0x55, 0x00, 0x06, 0x04, 0x26, 0x65, 0x5D];
+                for data in res{
+                    self.tx_buf.push_back(data).unwrap();
+                }
+            }         
+        }
+        fn read(&mut self) -> Option<u8> {
+            self.tx_buf.pop_front()
         }
     }
 
@@ -232,7 +254,7 @@ mod tests {
         let mut mock_uart = MockSerial::new();
         let mut dxl = DynamixelControl::new(&mut mock_uart);
         dxl.torque_enable(true);
-        assert_eq!(*mock_uart.buf, [0xFF, 0x6f, 0x6c, 0x61]);    
+        assert_eq!(*mock_uart.rx_buf, [0xFF, 0x6f, 0x6c, 0x61]);    
     }
 
     #[test]    
@@ -241,7 +263,7 @@ mod tests {
         let mut dxl = DynamixelControl::new(&mut mock_uart);
         dxl.set_led(1, 1);
         // crc以外をテスト
-        assert_eq!(mock_uart.buf[..11], [0xFF, 0xFF, 0xFD, 0x00, 0x01, 0x06, 0x00, 0x03, 65, 0x00, 0x01]);    
+        assert_eq!(mock_uart.rx_buf[..11], [0xFF, 0xFF, 0xFD, 0x00, 0x01, 0x06, 0x00, 0x03, 65, 0x00, 0x01]);    
     }
 
     #[test]    
@@ -251,7 +273,7 @@ mod tests {
         let mut mock_uart = MockSerial::new();
         let mut dxl = DynamixelControl::new(&mut mock_uart);
         let (model_number, firmware_version) = dxl.ping(1);
-        assert_eq!(*mock_uart.buf, [0xFF, 0xFF, 0xFD, 0x00, 0x01, 0x03, 0x00, 0x01, 0x19, 0x4E]);
+        assert_eq!(*mock_uart.rx_buf, [0xFF, 0xFF, 0xFD, 0x00, 0x01, 0x03, 0x00, 0x01, 0x19, 0x4E]);
         assert_eq!(model_number, 0x0406);
         assert_eq!(firmware_version, 0x26);
     }
@@ -262,8 +284,8 @@ mod tests {
         let mut mock_uart = MockSerial::new();
         let mut dxl = DynamixelControl::new(&mut mock_uart);
         let mut data = [0; 1];
-        dxl.read(1, 132, 4, &mut data);
-        assert_eq!(*mock_uart.buf, [0xFF, 0xFF, 0xFD, 0x00, 0x01, 0x07, 0x00, 0x02, 0x84, 0x00, 0x04, 0x00, 0x1D, 0x15]);    
+        dxl.read(1, ControlTable::PresentPosition.to_address(), ControlTable::PresentPosition.to_size(), &mut data);
+        assert_eq!(*mock_uart.rx_buf, [0xFF, 0xFF, 0xFD, 0x00, 0x01, 0x07, 0x00, 0x02, 0x84, 0x00, 0x04, 0x00, 0x1D, 0x15]);  
     }
 
     #[test]    
@@ -272,8 +294,8 @@ mod tests {
         let mut mock_uart = MockSerial::new();
         let mut dxl = DynamixelControl::new(&mut mock_uart);
         let data: u32 = 0x00000200;
-        dxl.write(1, 0x0074, &data.to_le_bytes());
-        assert_eq!(*mock_uart.buf, [0xFF, 0xFF, 0xFD, 0x00, 0x01, 0x09, 0x00, 0x03, 0x74, 0x00, 0x00, 0x02, 0x00, 0x00, 0xCA, 0x89]);    
+        dxl.write(1, ControlTable::GoalPosition.to_address(), &data.to_le_bytes());
+        assert_eq!(*mock_uart.rx_buf, [0xFF, 0xFF, 0xFD, 0x00, 0x01, 0x09, 0x00, 0x03, 0x74, 0x00, 0x00, 0x02, 0x00, 0x00, 0xCA, 0x89]);    
     }
 
     #[test]    
