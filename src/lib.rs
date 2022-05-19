@@ -1,10 +1,13 @@
 #![no_std]
 //! This crate is for control dynamixel.
 //! 
-use heapless::Vec;
 mod control_table;
-use control_table::ControlTable;
+mod packet_handler;
+mod instruction;
+use heapless::Vec;
 use core::result::Result;
+use control_table::ControlTable;
+use instruction::Instruction;
 
 pub trait Interface {
     fn write_byte(&mut self, data: u8);
@@ -35,6 +38,7 @@ impl<'a> DynamixelControl<'a> {
 
     /// 👺Broadcast is not implemented yet.
     /// 👺型をちゃんとモデルナンバーとファームバージョンにした方がいいかも
+    /// 👺待ち方が不十分
     pub fn ping(&mut self, id: u8) -> (u16, u8) {
         let length: u16 = 1 + 2;     // instruction + crc
         let mut msg = Vec::<u8, 256>::new();
@@ -65,45 +69,6 @@ impl<'a> DynamixelControl<'a> {
         } else {
             (0,0)
         }
-
-    }
-
-    pub fn read(&mut self, id: u8, data_name: ControlTable, data: &mut [u8]) {
-
-        let address = data_name.to_address();
-        let size = data_name.to_size();
-        let length: u16 = 1 + 2 + 2 + 2;     // instruction + adress + data length + crc
-        let mut msg = Vec::<u8, 256>::new();
-        msg.extend(self.make_msg_header().iter().cloned());
-        msg.push(id).unwrap();
-        msg.extend(length.to_le_bytes().iter().cloned());       // Set length temporary
-        msg.push(Instruction::Read.to_value()).unwrap();
-        msg.extend(address.to_le_bytes().iter().cloned());
-        msg.extend(size.to_le_bytes().iter().cloned());
-
-        msg.extend(self.calc_crc_value(&msg).to_le_bytes().iter().cloned());
-
-        for m in msg {
-            self.uart.write_byte(m);
-        }
-
-        let mut status = Vec::<u8, 128>::new();
-        let status_len = 4 + 1 + 2 + 1 + 1 + size + 2;     // header + id + length + instruction + err + param + crc
-        for _i in 0..status_len {
-            match self.uart.read() {
-                None => {},
-                Some(data) => {
-                    status.push(data).unwrap();
-                },
-            }
-        }
-        // if status.len() == status_len {
-        //     let model_number = u16::from_le_bytes([status[9], status[10]]);
-        //     let firmware_version = status[11];
-        //     (model_number, firmware_version)
-        // } else {
-        //     (0,0)
-        // }
 
     }
 
@@ -181,47 +146,6 @@ impl<'a> DynamixelControl<'a> {
 
 }
 
-pub enum Instruction {
-    Ping,
-    Read,
-    Write,
-    RegWrite,
-    Action,
-    FactoryReset,
-    Reboot,
-    Clear,
-    ControlTableBackup,
-    Status,
-    SyncRead,
-    SyncWrite,
-    FastSyncRead,
-    BulkRead,
-    BulkWrite,
-    FastBulkRead, 
-}
-
-impl Instruction {
-    pub fn to_value(&self) -> u8 {
-        match self {
-            Instruction::Ping => 0x01,
-            Instruction::Read => 0x02,
-            Instruction::Write => 0x03,
-            Instruction::RegWrite => 0x04,
-            Instruction::Action => 0x05,
-            Instruction::FactoryReset => 0x06,
-            Instruction::Reboot => 0x08,
-            Instruction::Clear => 0x10,
-            Instruction::ControlTableBackup => 0x20,
-            Instruction::Status => 0x55,
-            Instruction::SyncRead => 0x82,
-            Instruction::SyncWrite => 0x83,
-            Instruction::FastSyncRead => 0x8A,
-            Instruction::BulkRead => 0x92,
-            Instruction::BulkWrite => 0x93,
-            Instruction::FastBulkRead => 0x9A,
-        }
-    }
-}
 
 #[cfg(test)]
 mod tests {
