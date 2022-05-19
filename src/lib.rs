@@ -68,10 +68,10 @@ impl<'a> DynamixelControl<'a> {
 
     }
 
-    pub fn read(&mut self, id: u8, data_name: ControlTable, address: u16, size: u16, data: &mut [u8]) {
+    pub fn read(&mut self, id: u8, data_name: ControlTable, data: &mut [u8]) {
 
         let address = data_name.to_address();
-        const size = size!(data_name);
+        let size = data_name.to_size();
         let length: u16 = 1 + 2 + 2 + 2;     // instruction + adress + data length + crc
         let mut msg = Vec::<u8, 256>::new();
         msg.extend(self.make_msg_header().iter().cloned());
@@ -306,7 +306,7 @@ mod tests {
         let mut mock_uart = MockSerial::new();
         let mut dxl = DynamixelControl::new(&mut mock_uart);
         let mut data = [0; 1];
-        dxl.read(1, ControlTable::PresentPosition.to_address(), ControlTable::PresentPosition.to_size(), &mut data);
+        dxl.read(1, ControlTable::PresentPosition, &mut data);
         assert_eq!(*mock_uart.rx_buf, [0xFF, 0xFF, 0xFD, 0x00, 0x01, 0x07, 0x00, 0x02, 0x84, 0x00, 0x04, 0x00, 0x1D, 0x15]);  
     }
 
