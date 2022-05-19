@@ -398,7 +398,108 @@ impl ControlTable {
             ControlTable::IndirectData20 => 1.0, 
         }
     }
+}
 
+#[allow(unused_macros)]
+macro_rules! size {
+    ($v: expr) => {
+        match $v {
+            ControlTable::ModelNumber => 2,
+            ControlTable::ModelInformation => 4,
+            ControlTable::FirmwareVersion => 1,
+            ControlTable::ID => 1,
+            ControlTable::BaudRate => 1, 
+            ControlTable::ReturnDelayTime => 1,
+            ControlTable::DriveMode => 1,
+            ControlTable::OperatingMode => 1,
+            ControlTable::SecondaryID => 1,
+            ControlTable::ProtocolType => 1,
+            ControlTable::HomingOffset => 4,
+            ControlTable::MovingThreshold => 4,
+            ControlTable::TemperatureLimit => 1,
+            ControlTable::MaxVoltageLimit => 2,
+            ControlTable::MinVoltageLimit => 2,
+            ControlTable::PWMLimit => 2,
+            ControlTable::CurrentLimit => 2,
+            ControlTable::VelocityLimit => 4,
+            ControlTable::MaxPositionLimit => 4,
+            ControlTable::MinPositionLimit => 4,
+            ControlTable::StartupConfiguration => 1,
+            ControlTable::PWMSlope => 1,
+            ControlTable::Shutdown => 1,
+            ControlTable::TorqueEnable => 1,
+            ControlTable::LED => 1,
+            ControlTable::StatusReturnLevel => 1,
+            ControlTable::RegisteredInstruction => 1,
+            ControlTable::HardwareErrorStatus => 1,
+            ControlTable::VelocityIGain => 2,
+            ControlTable::VelocityPgain => 2,
+            ControlTable::PositionDGain => 2,
+            ControlTable::PositionIGain => 2,
+            ControlTable::PositionPGain => 2,
+            ControlTable::Feedforward2ndGain => 2,
+            ControlTable::Feedforward1stGain => 2,
+            ControlTable::BusWatchdog => 1,
+            ControlTable::GoalPWM => 2,
+            ControlTable::GoalCurrent => 2,
+            ControlTable::GoalVelocity => 4,
+            ControlTable::ProfileAccleration => 4,
+            ControlTable::ProfileVelocity => 4,
+            ControlTable::GoalPosition => 4,
+            ControlTable::RealtimeTick => 2,
+            ControlTable::Moving => 1,
+            ControlTable::MovingStatus => 1,
+            ControlTable::PresentPWM => 2,
+            ControlTable::PresentCurrent => 2,
+            ControlTable::PresentVelocity => 4,
+            ControlTable::PresentPosition => 4,
+            ControlTable::VelocityTrajectory => 4,
+            ControlTable::PositionTrajectory => 4,
+            ControlTable::PresentInputVoltage => 2,
+            ControlTable::PresentTemperature => 1,
+            ControlTable::BackupReady => 1,
+            ControlTable::IndirectAddress1 => 2, 
+            ControlTable::IndirectAddress2 => 2, 
+            ControlTable::IndirectAddress3 => 2, 
+            ControlTable::IndirectAddress4 => 2, 
+            ControlTable::IndirectAddress5 => 2, 
+            ControlTable::IndirectAddress6 => 2, 
+            ControlTable::IndirectAddress7 => 2, 
+            ControlTable::IndirectAddress8 => 2, 
+            ControlTable::IndirectAddress9 => 2, 
+            ControlTable::IndirectAddress10 => 2, 
+            ControlTable::IndirectAddress11 => 2, 
+            ControlTable::IndirectAddress12 => 2, 
+            ControlTable::IndirectAddress13 => 2, 
+            ControlTable::IndirectAddress14 => 2, 
+            ControlTable::IndirectAddress15 => 2, 
+            ControlTable::IndirectAddress16 => 2, 
+            ControlTable::IndirectAddress17 => 2, 
+            ControlTable::IndirectAddress18 => 2, 
+            ControlTable::IndirectAddress19 => 2, 
+            ControlTable::IndirectAddress20 => 2, 
+            ControlTable::IndirectData1 => 1, 
+            ControlTable::IndirectData2 => 1, 
+            ControlTable::IndirectData3 => 1, 
+            ControlTable::IndirectData4 => 1, 
+            ControlTable::IndirectData5 => 1, 
+            ControlTable::IndirectData6 => 1, 
+            ControlTable::IndirectData7 => 1, 
+            ControlTable::IndirectData8 => 1, 
+            ControlTable::IndirectData9 => 1, 
+            ControlTable::IndirectData10 => 1, 
+            ControlTable::IndirectData11 => 1, 
+            ControlTable::IndirectData12 => 1, 
+            ControlTable::IndirectData13 => 1, 
+            ControlTable::IndirectData14 => 1, 
+            ControlTable::IndirectData15 => 1, 
+            ControlTable::IndirectData16 => 1, 
+            ControlTable::IndirectData17 => 1, 
+            ControlTable::IndirectData18 => 1, 
+            ControlTable::IndirectData19 => 1, 
+            ControlTable::IndirectData20 => 1, 
+        }
+    };
 }
 
 
@@ -417,10 +518,21 @@ mod tests {
         assert_eq!(name.to_size(), 2);
         assert_eq!(ControlTable::TorqueEnable.to_size(), 1);
     }
+
+    #[test]    
+    fn data_size_macro_xc330() {
+        let name = ControlTable::ModelNumber;
+        assert_eq!(size!(name), 2);
+        assert_eq!(size!(ControlTable::TorqueEnable), 1);
+        assert_eq!([1; size!(ControlTable::TorqueEnable)], [1; 1]);
+        
+    }
+
     #[test]    
     fn to_unit_xc330() {
         let name = ControlTable::ModelNumber;
         assert_eq!(name.to_unit(), 1.0);
         assert_eq!(ControlTable::PresentPWM.to_unit(), 0.113);
     }
+
 }

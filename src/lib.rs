@@ -49,7 +49,8 @@ impl<'a> DynamixelControl<'a> {
         }
 
         let mut status = Vec::<u8, 128>::new();
-        for _i in 0..14 {
+        let status_len = 14;
+        for _i in 0..status_len {
             match self.uart.read() {
                 None => {},
                 Some(data) => {
@@ -57,7 +58,7 @@ impl<'a> DynamixelControl<'a> {
                 },
             }
         }
-        if status.len() == 14 {
+        if status.len() == status_len {
             let model_number = u16::from_le_bytes([status[9], status[10]]);
             let firmware_version = status[11];
             (model_number, firmware_version)
@@ -67,7 +68,10 @@ impl<'a> DynamixelControl<'a> {
 
     }
 
-    pub fn read(&mut self, id: u8, address: u16, size: u16, data: &mut [u8]) {
+    pub fn read(&mut self, id: u8, data_name: ControlTable, address: u16, size: u16, data: &mut [u8]) {
+
+        let address = data_name.to_address();
+        const size = size!(data_name);
         let length: u16 = 1 + 2 + 2 + 2;     // instruction + adress + data length + crc
         let mut msg = Vec::<u8, 256>::new();
         msg.extend(self.make_msg_header().iter().cloned());
@@ -82,6 +86,24 @@ impl<'a> DynamixelControl<'a> {
         for m in msg {
             self.uart.write_byte(m);
         }
+
+        let mut status = Vec::<u8, 128>::new();
+        let status_len = 4 + 1 + 2 + 1 + 1 + size + 2;     // header + id + length + instruction + err + param + crc
+        for _i in 0..status_len {
+            match self.uart.read() {
+                None => {},
+                Some(data) => {
+                    status.push(data).unwrap();
+                },
+            }
+        }
+        // if status.len() == status_len {
+        //     let model_number = u16::from_le_bytes([status[9], status[10]]);
+        //     let firmware_version = status[11];
+        //     (model_number, firmware_version)
+        // } else {
+        //     (0,0)
+        // }
 
     }
 
