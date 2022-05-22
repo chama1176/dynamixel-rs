@@ -5,6 +5,7 @@ use crate::Instruction;
 use core::fmt;
 
 pub const MAX_PACKET_LEN: usize = 128;
+pub const BROADCAST_ID: u8 = 0xFE;
 
 #[allow(dead_code)]
 pub enum Packet {
@@ -52,7 +53,7 @@ pub enum ErrorBit {
 }
 
 #[allow(dead_code)]
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum CommunicationResult {
     Success,
     PortBusy,
@@ -93,42 +94,20 @@ impl fmt::Display for CommunicationResult {
 #[allow(dead_code)]
 impl<'a> DynamixelControl<'a> {
 
-    pub fn read(&mut self, id: u8, data_name: ControlTable, data: &mut [u8]) {
-
-        let address = data_name.to_address();
-        let size = data_name.to_size();
-        let length: u16 = 1 + 2 + 2 + 2;     // instruction + adress + data length + crc
-        let mut msg = Vec::<u8, MAX_PACKET_LEN>::new();
-        msg.extend(self.reserve_msg_header().iter().cloned());
-        msg.push(id).unwrap();
-        msg.extend(length.to_le_bytes().iter().cloned());       // Set length temporary
-        msg.push(Instruction::Read.to_value()).unwrap();
-        msg.extend(address.to_le_bytes().iter().cloned());
-        msg.extend(size.to_le_bytes().iter().cloned());
-
-        self.send_packet(msg);
-
-        let mut status = Vec::<u8, 128>::new();
-        let status_len = 4 + 1 + 2 + 1 + 1 + size + 2;     // header + id + length + instruction + err + param + crc
-        for _i in 0..status_len {
-            match self.uart.read() {
-                None => {},
-                Some(data) => {
-                    status.push(data).unwrap();
-                },
-            }
-        }
-
+    pub fn reserve_msg_header(&self) -> [u8; 4] {
+        [0x00; 4]     // Header and reserved len
     }
+
     fn add_stuffing(&mut self) {}
     fn remove_stuffing(&mut self) {}
 
+    /// Set packet without crc.
     pub fn send_packet(&mut self, mut msg: Vec::<u8, MAX_PACKET_LEN>) -> CommunicationResult {
         // make header
-        msg[0] = 0xFF;
-        msg[1] = 0xFF;
-        msg[2] = 0xFD;
-        msg[3] = 0x00;
+        msg[Packet::Header0.to_pos()] = 0xFF;
+        msg[Packet::Header1.to_pos()] = 0xFF;
+        msg[Packet::Header2.to_pos()] = 0xFD;
+        msg[Packet::Reserved.to_pos()] = 0x00;
 
         // msg.extend(self.make_msg_header().iter().cloned());
         // // msg.push(id).unwrap();
@@ -145,12 +124,60 @@ impl<'a> DynamixelControl<'a> {
         CommunicationResult::Success
     }
     fn receive_packet(&mut self) -> CommunicationResult {
+
+
+
         CommunicationResult::Success
     }
 
-    // fn readTx(&mut self) {}
-    // fn readRx(&mut self) {}
-    // fn readTxRx(&mut self) {}
+    fn send_read_packet(&mut self, id: u8, name: ControlTable) -> CommunicationResult {
+
+        if id >= BROADCAST_ID { 
+            return CommunicationResult::NotAvailable
+        }
+
+        let address = name.to_address();
+        let size = name.to_size();
+        let length: u16 = 1 + 2 + 2 + 2;     // instruction + adress + data length + crc
+        let mut msg = Vec::<u8, MAX_PACKET_LEN>::new();
+
+        msg.extend(self.reserve_msg_header().iter().cloned());
+        msg.push(id).unwrap();
+        msg.extend(length.to_le_bytes().iter().cloned());       // Set length temporary
+        msg.push(Instruction::Read.to_value()).unwrap();
+        msg.extend(address.to_le_bytes().iter().cloned());
+        msg.extend(size.to_le_bytes().iter().cloned());
+
+        let result = self.send_packet(msg);
+        
+        if result == CommunicationResult::Success {
+            // Set timeout
+        }
+
+        result
+    }
+    fn receive_read_packet(&mut self) {
+
+    }
+
+    /// TxRx
+    pub fn read(&mut self, id: u8, data_name: ControlTable, data: &mut [u8]) {
+
+        let size = data_name.to_size() as usize;
+        self.send_read_packet(id, data_name);
+
+        let mut status = Vec::<u8, 128>::new();
+        let status_len = 4 + 1 + 2 + 1 + 1 + size + 2;     // header + id + length + instruction + err + param + crc
+        for _i in 0..status_len {
+            match self.uart.read() {
+                None => {},
+                Some(data) => {
+                    status.push(data).unwrap();
+                },
+            }
+        }
+    }
+
     // fn read1ByteTx(&mut self) {}
     // fn read1ByteRx(&mut self) {}
     // fn read1ByteTxRx(&mut self) {}
@@ -160,12 +187,46 @@ impl<'a> DynamixelControl<'a> {
     // fn read4ByteTx(&mut self) {}
     // fn read4ByteRx(&mut self) {}
     // fn read4ByteTxRx(&mut self) {}
-    // fn writeTxOnly(&mut self) {}
-    // fn writeTxRx(&mut self) {}
+    
+    pub fn send_write_packet(&mut self, id: u8, name: ControlTable, data: &[u8]) -> CommunicationResult {
+
+        if id >= BROADCAST_ID { 
+            return CommunicationResult::NotAvailable
+        }
+
+        let address = name.to_address();
+        let size = name.to_size();
+        let length: u16 = 1 + 2 + (data.len() as u16) + 2;     // instruction + adress + data + crc
+
+        if size != data.len() as u16 {
+            return CommunicationResult::NotAvailable
+        }
+
+        let mut msg = Vec::<u8, MAX_PACKET_LEN>::new();
+        msg.extend(self.reserve_msg_header().iter().cloned());
+        msg.push(id).unwrap();
+        msg.extend(length.to_le_bytes().iter().cloned());       // Set length temporary
+        msg.push(Instruction::Write.to_value()).unwrap();
+        msg.extend(address.to_le_bytes().iter().cloned());
+
+        for d in data {
+            msg.push(*d).unwrap();
+        }
+
+        self.send_packet(msg)
+
+    }
+
+    /// TxRx
+    pub fn write(&mut self, id: u8, address: u16, data: &[u8]) {
+    }
+
     // fn write1ByteTx(&mut self) {}
     // fn write1ByteTxRx(&mut self) {}
     // fn write2ByteTx(&mut self) {}
     // fn write2ByteTxRx(&mut self) {}
+    // fn write4ByteTx(&mut self) {}
+    // fn write4ByteTxRx(&mut self) {}
     // regWriteTxOnly
     // regWriteTxRx
     // syncReadTx

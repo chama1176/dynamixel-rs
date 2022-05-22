@@ -28,7 +28,7 @@ impl<'a> DynamixelControl<'a> {
     }
 
     pub fn set_led(&mut self, id: u8, data: u8) {
-        self.write(id, ControlTable::LED.to_address(), &[data]);
+        self.send_write_packet(id, ControlTable::LED, &[data]);
     }
 
     pub fn torque_enable(&mut self, enabled: bool) {
@@ -77,26 +77,6 @@ impl<'a> DynamixelControl<'a> {
     pub fn clear_multi_turn(&mut self) {}
     pub fn factory_reset(&mut self) {}
 
-    pub fn write(&mut self, id: u8, address: u16, data: &[u8]) {
-        let length: u16 = 1 + 2 + (data.len() as u16) + 2;     // instruction + adress + data + crc
-        let mut msg = Vec::<u8, MAX_PACKET_LEN>::new();
-        msg.extend(self.reserve_msg_header().iter().cloned());
-        msg.push(id).unwrap();
-        msg.extend(length.to_le_bytes().iter().cloned());       // Set length temporary
-        msg.push(Instruction::Write.to_value()).unwrap();
-        msg.extend(address.to_le_bytes().iter().cloned());
-
-        for d in data {
-            msg.push(*d).unwrap();
-        }
-
-        self.send_packet(msg);
-        // self.uart.read()
-    }
-
-    fn reserve_msg_header(&self) -> [u8; 4] {
-        [0x00; 4]     // Header and reserved len
-    }
 
 
 }
@@ -195,7 +175,7 @@ mod tests {
         let mut mock_uart = MockSerial::new();
         let mut dxl = DynamixelControl::new(&mut mock_uart);
         let data: u32 = 0x00000200;
-        dxl.write(1, ControlTable::GoalPosition.to_address(), &data.to_le_bytes());
+        dxl.send_write_packet(1, ControlTable::GoalPosition, &data.to_le_bytes());
         assert_eq!(*mock_uart.rx_buf, [0xFF, 0xFF, 0xFD, 0x00, 0x01, 0x09, 0x00, 0x03, 0x74, 0x00, 0x00, 0x02, 0x00, 0x00, 0xCA, 0x89]);    
     }
 
@@ -203,6 +183,5 @@ mod tests {
     fn u16_to_u8() {
         assert_eq!((0xFBFA as u16).to_le_bytes() , [0xFA, 0xFB]);    
     }
-
 
 }
