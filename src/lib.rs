@@ -23,13 +23,13 @@ pub struct DynamixelControl<'a> {
     timer: &'a mut dyn Timer,
     is_enabled: bool,
     is_using: bool,
-    
+    packet_start_time: f32,
 }
 
 impl<'a> DynamixelControl<'a> {
     pub fn new(uart: &'a mut dyn Interface, timer: &'a mut dyn Timer) -> Self {
         
-        Self { uart, timer, is_enabled: false, is_using : false }
+        Self { uart, timer, is_enabled: false, is_using: false, packet_start_time: 0.0}
     }
 
     pub fn set_led(&mut self, id: u8, data: u8) {

@@ -470,6 +470,4 @@ mod tests {
         assert_eq!(dxl.calc_crc_value(&msg), 0x5D65);    
     }
 
-
-
 }
