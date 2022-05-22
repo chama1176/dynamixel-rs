@@ -12,19 +12,24 @@ use packet_handler::MAX_PACKET_LEN;
 
 pub trait Interface {
     fn write_byte(&mut self, data: u8);
-    fn read(&mut self) -> Option<u8>;
+    fn read_byte(&mut self) -> Option<u8>;
+}
+pub trait Timer {
+    fn get_current_time(&self) -> f32;
 }
 
 pub struct DynamixelControl<'a> {
     uart: &'a mut dyn Interface,
+    timer: &'a mut dyn Timer,
     is_enabled: bool,
+    is_using: bool,
     
 }
 
 impl<'a> DynamixelControl<'a> {
-    pub fn new(uart: &'a mut dyn Interface,) -> Self {
+    pub fn new(uart: &'a mut dyn Interface, timer: &'a mut dyn Timer) -> Self {
         
-        Self { uart, is_enabled: false }
+        Self { uart, timer, is_enabled: false, is_using : false }
     }
 
     pub fn set_led(&mut self, id: u8, data: u8) {
@@ -54,7 +59,7 @@ impl<'a> DynamixelControl<'a> {
         let mut status = Vec::<u8, 128>::new();
         let status_len = 14;
         for _i in 0..status_len {
-            match self.uart.read() {
+            match self.uart.read_byte() {
                 None => {},
                 Some(data) => {
                     status.push(data).unwrap();
@@ -125,15 +130,35 @@ mod tests {
                 }
             }         
         }
-        fn read(&mut self) -> Option<u8> {
+        fn read_byte(&mut self) -> Option<u8> {
             self.tx_buf.pop_front()
         }
+    }
+
+    pub struct MockTimer {
+        now: u32,
+    }
+    impl MockTimer {
+        pub fn new() -> Self {
+            Self { 
+                now: 0,
+            }
+        }
+        pub fn tick(&mut self) {
+            self.now += 1;
+        }
+    }
+    impl crate::Timer for MockTimer {
+        fn get_current_time(&self) -> f32 {
+            0.0
+        } 
     }
 
     #[test]    
     fn torque_enable_xc330() {
         let mut mock_uart = MockSerial::new();
-        let mut dxl = DynamixelControl::new(&mut mock_uart);
+        let mut mock_timer = MockTimer::new();
+        let mut dxl = DynamixelControl::new(&mut mock_uart, &mut mock_timer);
         dxl.torque_enable(true);
         assert_eq!(*mock_uart.rx_buf, [0xFF, 0x6f, 0x6c, 0x61]);    
     }
@@ -141,7 +166,8 @@ mod tests {
     #[test]    
     fn set_led_xc330() {
         let mut mock_uart = MockSerial::new();
-        let mut dxl = DynamixelControl::new(&mut mock_uart);
+        let mut mock_timer = MockTimer::new();
+        let mut dxl = DynamixelControl::new(&mut mock_uart, &mut mock_timer);
         dxl.set_led(1, 1);
         // crc以外をテスト
         assert_eq!(mock_uart.rx_buf[..11], [0xFF, 0xFF, 0xFD, 0x00, 0x01, 0x06, 0x00, 0x03, 65, 0x00, 0x01]);    
@@ -152,7 +178,8 @@ mod tests {
         // ID1(XM430-W210) : For Model Number 1030(0x0406), Version of Firmware 38(0x26)
         // Instruction Packet ID : 1
         let mut mock_uart = MockSerial::new();
-        let mut dxl = DynamixelControl::new(&mut mock_uart);
+        let mut mock_timer = MockTimer::new();
+        let mut dxl = DynamixelControl::new(&mut mock_uart, &mut mock_timer);
         let (model_number, firmware_version) = dxl.ping(1);
         assert_eq!(*mock_uart.rx_buf, [0xFF, 0xFF, 0xFD, 0x00, 0x01, 0x03, 0x00, 0x01, 0x19, 0x4E]);
         assert_eq!(model_number, 0x0406);
@@ -163,7 +190,8 @@ mod tests {
     fn read() {
         // ID1(XM430-W210) : Present Position(132, 0x0084, 4[byte]) = 166(0x000000A6)
         let mut mock_uart = MockSerial::new();
-        let mut dxl = DynamixelControl::new(&mut mock_uart);
+        let mut mock_timer = MockTimer::new();
+        let mut dxl = DynamixelControl::new(&mut mock_uart, &mut mock_timer);
         let mut data = [0; 1];
         dxl.read(1, ControlTable::PresentPosition, &mut data);
         assert_eq!(*mock_uart.rx_buf, [0xFF, 0xFF, 0xFD, 0x00, 0x01, 0x07, 0x00, 0x02, 0x84, 0x00, 0x04, 0x00, 0x1D, 0x15]);  
@@ -173,7 +201,8 @@ mod tests {
     fn write() {
         // ID1(XM430-W210) : Write 512(0x00000200) to Goal Position(116, 0x0074, 4[byte])
         let mut mock_uart = MockSerial::new();
-        let mut dxl = DynamixelControl::new(&mut mock_uart);
+        let mut mock_timer = MockTimer::new();
+        let mut dxl = DynamixelControl::new(&mut mock_uart, &mut mock_timer);
         let data: u32 = 0x00000200;
         dxl.send_write_packet(1, ControlTable::GoalPosition, &data.to_le_bytes());
         assert_eq!(*mock_uart.rx_buf, [0xFF, 0xFF, 0xFD, 0x00, 0x01, 0x09, 0x00, 0x03, 0x74, 0x00, 0x00, 0x02, 0x00, 0x00, 0xCA, 0x89]);    

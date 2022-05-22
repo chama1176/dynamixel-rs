@@ -1,4 +1,5 @@
 use heapless::Vec;
+use heapless::Deque;
 use crate::DynamixelControl;
 use crate::ControlTable;
 use crate::Instruction;
@@ -125,9 +126,115 @@ impl<'a> DynamixelControl<'a> {
     }
     fn receive_packet(&mut self) -> CommunicationResult {
 
+        let mut result = CommunicationResult::TxFail;
+        let mut wait_length = 11; // minimum length (HEADER0 HEADER1 HEADER2 RESERVED ID LENGTH_L LENGTH_H INST ERROR CRC16_L CRC16_H)
+        let mut msg = Vec::<u8, MAX_PACKET_LEN>::new(); // VecDeque is not implemented in heapless.
 
+        loop {
+            loop {
+                if msg.len() >= wait_length {
+                    break;
+                }
+                match self.uart.read_byte() {
+                    None => { break; },
+                    Some(res) => {
+                        msg.push(res).unwrap();
+                    },
+                }
+            }
 
-        CommunicationResult::Success
+            if msg.len() >= wait_length {
+                let mut idx = 0;
+                // find packet header
+                while idx < (msg.len() - 3) {
+                    if msg[idx + Packet::Header0.to_pos()] == 0xFF &&
+                    msg[idx + Packet::Header1.to_pos()] == 0xFF &&
+                    msg[idx + Packet::Header2.to_pos()] == 0xFD &&
+                    msg[idx + Packet::Reserved.to_pos()] == 0x00 {
+                        break;
+                    }
+                    idx += 1;
+                }
+                
+                if idx == 0 { // found at the beginning of the packet
+                    if msg[Packet::Reserved.to_pos()] != 0x00 ||
+                    msg[Packet::Id.to_pos()] > 0xFC ||
+                    u16::from_le_bytes([msg[Packet::LengthL.to_pos()], msg[Packet::LengthL.to_pos()]]) as usize > MAX_PACKET_LEN ||
+                    msg[Packet::Instruction.to_pos()] != 0x55 {
+                        // remove the first byte in the packet
+                        for s in 0..msg.len() - 1 {
+                            msg[s] = msg[s + 1];
+                        }
+                        msg.truncate(msg.len() - 1);
+                        continue;
+                    }
+                    // re-calculate the exact length of the rx packet
+                    if wait_length != u16::from_le_bytes([msg[Packet::LengthL.to_pos()], msg[Packet::LengthL.to_pos()]]) as usize + Packet::LengthH.to_pos() + 1 {
+                        wait_length = u16::from_le_bytes([msg[Packet::LengthL.to_pos()], msg[Packet::LengthL.to_pos()]]) as usize + Packet::LengthH.to_pos() + 1;
+                        continue;
+                    }
+            
+                    if msg.len() < wait_length {
+                        // check timeout
+                        // if (port.isPacketTimeout() == true) {
+                        // if (rx_length == 0)
+                        // {
+                        //     result = COMM_RX_TIMEOUT;
+                        // }
+                        // else
+                        // {
+                        //     result = COMM_RX_CORRUPT;
+                        // }
+                        // break;
+                        // } else {
+                        //     continue;
+                        // }
+                        continue;
+                    }
+            
+                    // verify CRC16
+                    let crc = u16::from_le_bytes([msg[msg.len() - 2], msg[msg.len() - 1]]);
+                    if self.calc_crc_value(&msg[..msg.len()-2]) == crc {
+                        result = CommunicationResult::Success;
+                    }
+                    else
+                    {
+                        result = CommunicationResult::RxCorrupt;
+                    }
+                    break;
+                } else {
+                    // remove unnecessary packets
+                    for s in 0..(msg.len() - idx){
+                        msg[s] = msg[idx + s];
+                    }
+                    msg.truncate(msg.len() - idx);
+                }
+            }
+            else
+            {
+                // check timeout
+                // if (port->isPacketTimeout() == true)
+                // {
+                //     if (rx_length == 0)
+                //     {
+                //         result = COMM_RX_TIMEOUT;
+                //     }
+                //     else
+                //     {
+                //         result = COMM_RX_CORRUPT;
+                //     }
+                //     break;
+                // }
+            }
+            // usleep(0);
+        }
+        self.is_using = false;
+    
+        if result == CommunicationResult::Success {
+            // removeStuffing(rxpacket);
+        }
+    
+        result
     }
 
     fn send_read_packet(&mut self, id: u8, name: ControlTable) -> CommunicationResult {
@@ -169,7 +276,7 @@ impl<'a> DynamixelControl<'a> {
         let mut status = Vec::<u8, 128>::new();
         let status_len = 4 + 1 + 2 + 1 + 1 + size + 2;     // header + id + length + instruction + err + param + crc
         for _i in 0..status_len {
-            match self.uart.read() {
+            match self.uart.read_byte() {
                 None => {},
                 Some(data) => {
                     status.push(data).unwrap();
@@ -234,7 +341,7 @@ impl<'a> DynamixelControl<'a> {
     // bulkReadTx
     // bulkWriteTxOnly
 
-    pub fn calc_crc_value(&self, msg: &Vec<u8, MAX_PACKET_LEN>) -> u16 {
+    pub fn calc_crc_value(&self, msg: &[u8]) -> u16 {
         
         let crc_table = [
             0x0000, 0x8005, 0x800F, 0x000A, 0x801B, 0x001E, 0x0014, 0x8011,
@@ -280,6 +387,8 @@ impl<'a> DynamixelControl<'a> {
     
         crc_accum
     }
+
+
 
 }
 
@@ -327,15 +436,35 @@ mod tests {
                 }
             }         
         }
-        fn read(&mut self) -> Option<u8> {
+        fn read_byte(&mut self) -> Option<u8> {
             self.tx_buf.pop_front()
         }
+    }
+
+    pub struct MockTimer {
+        now: u32,
+    }
+    impl MockTimer {
+        pub fn new() -> Self {
+            Self { 
+                now: 0,
+            }
+        }
+        pub fn tick(&mut self) {
+            self.now += 1;
+        }
+    }
+    impl crate::Timer for MockTimer {
+        fn get_current_time(&self) -> f32 {
+            0.0
+        } 
     }
 
     #[test]    
     fn crc() {
         let mut mock_uart = MockSerial::new();
-        let dxl = DynamixelControl::new(&mut mock_uart);
+        let mut mock_timer = MockTimer::new();
+        let mut dxl = DynamixelControl::new(&mut mock_uart, &mut mock_timer);
         let mut msg = Vec::<u8, MAX_PACKET_LEN>::new();
         msg.extend([0xFF, 0xFF, 0xFD, 0x00, 0x01, 0x07, 0x00, 0x55, 0x00, 0x06, 0x04, 0x26].iter().cloned());
         assert_eq!(dxl.calc_crc_value(&msg), 0x5D65);    
