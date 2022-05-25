@@ -394,6 +394,7 @@ impl<'a> DynamixelControl<'a> {
 
 #[cfg(test)]
 mod tests {
+    use core::time::Duration;
     use heapless::Deque;
     use heapless::Vec;
     use crate::DynamixelControl;
@@ -442,21 +443,22 @@ mod tests {
     }
 
     pub struct MockTimer {
-        now: u32,
+        time_elasped: Duration,
     }
     impl MockTimer {
         pub fn new() -> Self {
             Self { 
-                now: 0,
+                time_elasped: Duration::new(0, 0),
             }
         }
         pub fn tick(&mut self) {
-            self.now += 1;
+            let dt = Duration::from_millis(1);
+            self.time_elasped += dt;
         }
     }
     impl crate::Timer for MockTimer {
-        fn get_current_time(&self) -> f32 {
-            0.0
+        fn get_current_time(&self) -> Duration {
+            self.time_elasped
         } 
     }
 
