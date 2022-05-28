@@ -1,4 +1,3 @@
-
 #[allow(dead_code)]
 pub enum Instruction {
     Ping,
@@ -16,7 +15,7 @@ pub enum Instruction {
     FastSyncRead,
     BulkRead,
     BulkWrite,
-    FastBulkRead, 
+    FastBulkRead,
 }
 
 impl Instruction {
