@@ -96,6 +96,7 @@ mod tests {
     use crate::DynamixelControl;
     use crate::Instruction;
     use core::time::Duration;
+    use core::cell::RefCell;
     use heapless::Deque;
     use heapless::Vec;
 
@@ -145,25 +146,24 @@ mod tests {
     }
 
     pub struct MockClock {
-        time_elasped: Duration,
+        time_elasped: RefCell<Duration>,
     }
     impl MockClock {
         pub fn new() -> Self {
             Self {
-                time_elasped: Duration::new(0, 0),
+                time_elasped: RefCell::new(Duration::new(0, 0)),
             }
         }
-        pub fn tick(&mut self) {
+        pub fn tick(&self) {
             let dt = Duration::from_millis(1);
-            self.time_elasped += dt;
+            self.time_elasped.replace_with(|&mut old| old + dt);
         }
     }
     impl crate::Clock for MockClock {
         fn get_current_time(&self) -> Duration {
-            self.time_elasped
+            self.time_elasped.clone().into_inner()
         }
     }
-
     #[test]
     fn torque_enable_xc330() {
         let mut mock_uart = MockSerial::new();

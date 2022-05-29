@@ -421,6 +421,7 @@ mod tests {
     use crate::DynamixelControl;
     use crate::Instruction;
     use core::time::Duration;
+    use core::cell::RefCell;
     use heapless::Deque;
     use heapless::Vec;
 
@@ -470,22 +471,22 @@ mod tests {
     }
 
     pub struct MockClock {
-        time_elasped: Duration,
+        time_elasped: RefCell<Duration>,
     }
     impl MockClock {
         pub fn new() -> Self {
             Self {
-                time_elasped: Duration::new(0, 0),
+                time_elasped: RefCell::new(Duration::new(0, 0)),
             }
         }
-        pub fn tick(&mut self) {
+        pub fn tick(&self) {
             let dt = Duration::from_millis(1);
-            self.time_elasped += dt;
+            self.time_elasped.replace_with(|&mut old| old + dt);
         }
     }
     impl crate::Clock for MockClock {
         fn get_current_time(&self) -> Duration {
-            self.time_elasped
+            self.time_elasped.clone().into_inner()
         }
     }
 
@@ -508,35 +509,20 @@ mod tests {
     #[test]
     fn clock() {
         let mut mock_uart = MockSerial::new();
-        let mut mock_clock = MockClock::new();
+        let mock_clock = MockClock::new();
 
         let mut dxl = DynamixelControl::new(&mut mock_uart, &mock_clock);
         dxl.set_packet_timeout(10);
         assert_eq!(dxl.is_packet_timeout(), false);
 
-        // mock_clock.tick();
+        mock_clock.tick();
 
-        // assert_eq!(dxl.is_packet_timeout(), true);
+        assert_eq!(dxl.is_packet_timeout(), true);
 
-    }
-
-    #[test]
-    fn mutex() {
-        use spin::Mutex;
-
-        let lock = Mutex::new(0);
-        
-        // Modify the data
-        *lock.lock() = 2;
-        
-        // Read the data
-        let answer = *lock.lock();
-        assert_eq!(answer, 2);
     }
 
     #[test]
     fn refcell() {
-        use core::cell::RefCell;
         let cell = RefCell::new(5);
         assert_eq!(cell.clone().into_inner(), 5);
 
