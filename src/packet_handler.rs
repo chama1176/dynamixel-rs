@@ -93,6 +93,7 @@ impl fmt::Display for CommunicationResult {
 
 #[allow(dead_code)]
 impl<'a> DynamixelControl<'a> {
+
     pub fn reserve_msg_header(&self) -> [u8; 4] {
         [0x00; 4] // Header and reserved len
     }
@@ -390,15 +391,22 @@ impl<'a> DynamixelControl<'a> {
         crc_accum
     }
 
-    fn set_packet_timeout(&mut self, packet_length: usize) {
-        // self.packet_timeout = (self.tx_time_per_byte * packet_length) + (LATENCY_Clock * 2.0) + 2.0    
-        self.packet_timeout = Duration::new(0, 0);
+    fn set_packet_timeout_length(&mut self, packet_length: usize) {
+        pub const LATENCY_CLOCK: u64 = 1_000;   // usec
+        self.packet_start_time = self.clock.get_current_time();
+        let timeout_usec = (self.tx_time_per_byte * packet_length as u64) + (LATENCY_CLOCK * 2) + 2_000;    
+        self.set_packet_timeout_micros(timeout_usec);
     }
 
-    // fn setPacketTimeoutMillis(self, msec) {
-    //     self.packet_start_time = self.getCurrentTime()
-    //     self.packet_timeout = msec    
-    // }
+    fn set_packet_timeout_millis(&mut self, msec: u64) {
+        self.packet_start_time = self.clock.get_current_time();
+        self.packet_timeout = Duration::from_millis(msec);
+    }
+
+    fn set_packet_timeout_micros(&mut self, usec: u64) {
+        self.packet_start_time = self.clock.get_current_time();
+        self.packet_timeout = Duration::from_micros(usec)
+    }
 
     fn is_packet_timeout(&self) -> bool{
         if self.clock.get_current_time() > self.packet_start_time + self.packet_timeout {
@@ -512,11 +520,14 @@ mod tests {
         let mock_clock = MockClock::new();
 
         let mut dxl = DynamixelControl::new(&mut mock_uart, &mock_clock);
-        dxl.set_packet_timeout(10);
+        dxl.set_packet_timeout_length(10);
+        assert_eq!(dxl.packet_timeout.as_micros(), 4700);
         assert_eq!(dxl.is_packet_timeout(), false);
-
+        for _ in 0..4 {
+            mock_clock.tick();
+        }
+        assert_eq!(dxl.is_packet_timeout(), false);
         mock_clock.tick();
-
         assert_eq!(dxl.is_packet_timeout(), true);
 
     }

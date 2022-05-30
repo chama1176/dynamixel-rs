@@ -26,9 +26,11 @@ pub struct DynamixelControl<'a> {
     is_using: bool,
     packet_start_time: Duration,
     packet_timeout: Duration,
+    tx_time_per_byte: u64,
 }
 
 impl<'a> DynamixelControl<'a> {
+
     pub fn new(uart: &'a mut dyn Interface, clock: &'a dyn Clock) -> Self {
         Self {
             uart,
@@ -36,7 +38,8 @@ impl<'a> DynamixelControl<'a> {
             is_enabled: false,
             is_using: false,
             packet_start_time: Duration::new(0, 0),
-            packet_timeout: Duration::new(0, 0)
+            packet_timeout: Duration::new(0, 0),
+            tx_time_per_byte: ((1_000_000.0 * 8.0 + (115200.0 - 1.0)) / 115200.0) as u64,
         }
     }
 
