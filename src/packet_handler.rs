@@ -123,6 +123,7 @@ impl<'a> DynamixelControl<'a> {
 
         CommunicationResult::Success
     }
+    
     fn receive_packet(&mut self) -> CommunicationResult {
         let mut result = CommunicationResult::TxFail;
         let mut wait_length = 11; // minimum length (HEADER0 HEADER1 HEADER2 RESERVED ID LENGTH_L LENGTH_H INST ERROR CRC16_L CRC16_H)
@@ -195,20 +196,16 @@ impl<'a> DynamixelControl<'a> {
 
                     if msg.len() < wait_length {
                         // check timeout
-                        // if (port.isPacketTimeout() == true) {
-                        // if (rx_length == 0)
-                        // {
-                        //     result = COMM_RX_TIMEOUT;
-                        // }
-                        // else
-                        // {
-                        //     result = COMM_RX_CORRUPT;
-                        // }
-                        // break;
-                        // } else {
-                        //     continue;
-                        // }
-                        continue;
+                        if self.is_packet_timeout() == true {
+                            if msg.len() == 0 {
+                                result = CommunicationResult::RxTimeout;
+                            } else {
+                                result = CommunicationResult::RxCorrupt;
+                            }
+                            break;
+                        } else {
+                            continue;
+                        }
                     }
 
                     // verify CRC16
@@ -228,18 +225,14 @@ impl<'a> DynamixelControl<'a> {
                 }
             } else {
                 // check timeout
-                // if (port->isPacketTimeout() == true)
-                // {
-                //     if (rx_length == 0)
-                //     {
-                //         result = COMM_RX_TIMEOUT;
-                //     }
-                //     else
-                //     {
-                //         result = COMM_RX_CORRUPT;
-                //     }
-                //     break;
-                // }
+                if self.is_packet_timeout() == true {
+                    if msg.len() == 0 {
+                        result = CommunicationResult::RxTimeout;
+                    } else {
+                        result = CommunicationResult::RxCorrupt;
+                    }
+                    break;
+                }
             }
             // usleep(0);
         }
@@ -416,9 +409,6 @@ impl<'a> DynamixelControl<'a> {
             false
         }
     }
-
-
-
 
 }
 
