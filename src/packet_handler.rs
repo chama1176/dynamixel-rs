@@ -93,7 +93,6 @@ impl fmt::Display for CommunicationResult {
 
 #[allow(dead_code)]
 impl<'a> DynamixelControl<'a> {
-
     pub fn reserve_msg_header(&self) -> [u8; 4] {
         [0x00; 4] // Header and reserved len
     }
@@ -123,17 +122,14 @@ impl<'a> DynamixelControl<'a> {
 
         CommunicationResult::Success
     }
-    
-    fn receive_packet(&mut self) -> CommunicationResult {
+
+    fn receive_packet(&mut self) -> (CommunicationResult, Vec<u8, MAX_PACKET_LEN>) {
         let mut result = CommunicationResult::TxFail;
         let mut wait_length = 11; // minimum length (HEADER0 HEADER1 HEADER2 RESERVED ID LENGTH_L LENGTH_H INST ERROR CRC16_L CRC16_H)
         let mut msg = Vec::<u8, MAX_PACKET_LEN>::new(); // VecDeque is not implemented in heapless.
-
+        
         loop {
-            loop {
-                if msg.len() >= wait_length {
-                    break;
-                }
+            while msg.len() < wait_length {
                 match self.uart.read_byte() {
                     None => {
                         break;
@@ -164,7 +160,7 @@ impl<'a> DynamixelControl<'a> {
                         || msg[Packet::Id.to_pos()] > 0xFC
                         || u16::from_le_bytes([
                             msg[Packet::LengthL.to_pos()],
-                            msg[Packet::LengthL.to_pos()],
+                            msg[Packet::LengthH.to_pos()],
                         ]) as usize
                             > MAX_PACKET_LEN
                         || msg[Packet::Instruction.to_pos()] != 0x55
@@ -180,14 +176,14 @@ impl<'a> DynamixelControl<'a> {
                     if wait_length
                         != u16::from_le_bytes([
                             msg[Packet::LengthL.to_pos()],
-                            msg[Packet::LengthL.to_pos()],
+                            msg[Packet::LengthH.to_pos()],
                         ]) as usize
                             + Packet::LengthH.to_pos()
                             + 1
                     {
                         wait_length = u16::from_le_bytes([
                             msg[Packet::LengthL.to_pos()],
-                            msg[Packet::LengthL.to_pos()],
+                            msg[Packet::LengthH.to_pos()],
                         ]) as usize
                             + Packet::LengthH.to_pos()
                             + 1;
@@ -242,7 +238,7 @@ impl<'a> DynamixelControl<'a> {
             // removeStuffing(rxpacket);
         }
 
-        result
+        (result, msg)
     }
 
     fn send_read_packet(&mut self, id: u8, name: ControlTable) -> CommunicationResult {
@@ -261,32 +257,43 @@ impl<'a> DynamixelControl<'a> {
         msg.push(Instruction::Read.to_value()).unwrap();
         msg.extend(address.to_le_bytes().iter().cloned());
         msg.extend(size.to_le_bytes().iter().cloned());
-
+        let packet_len = msg.len() + 2;
         let result = self.send_packet(msg);
 
         if result == CommunicationResult::Success {
-            // Set timeout
+            self.set_packet_timeout_length(packet_len);
         }
 
         result
     }
-    fn receive_read_packet(&mut self) {}
+
+    fn receive_read_packet(&mut self) -> (CommunicationResult, Vec<u8, MAX_PACKET_LEN>)  {
+        self.receive_packet()
+    }
 
     /// TxRx
-    pub fn read(&mut self, id: u8, data_name: ControlTable, data: &mut [u8]) {
+    pub fn read(&mut self, id: u8, data_name: ControlTable) -> (CommunicationResult, Vec<u8, MAX_PACKET_LEN>) {
+        let mut result = CommunicationResult::TxFail;
+        let mut status = Vec::<u8, MAX_PACKET_LEN>::new();
         let size = data_name.to_size() as usize;
-        self.send_read_packet(id, data_name);
+        result = self.send_read_packet(id, data_name);
 
-        let mut status = Vec::<u8, 128>::new();
-        let status_len = 4 + 1 + 2 + 1 + 1 + size + 2; // header + id + length + instruction + err + param + crc
-        for _i in 0..status_len {
-            match self.uart.read_byte() {
-                None => {}
-                Some(data) => {
-                    status.push(data).unwrap();
-                }
-            }
+        if result != CommunicationResult::Success {
+            return (result, status)
         }
+
+        // let status_len = 4 + 1 + 2 + 1 + 1 + size + 2; // header + id + length + instruction + err + param + crc
+        // for _i in 0..status_len {
+        //     match self.uart.read_byte() {
+        //         None => {}
+        //         Some(data) => {
+        //             status.push(data).unwrap();
+        //         }
+        //     }
+        // }
+
+        (result, status) = self.receive_read_packet();
+        (result, status)
     }
 
     // fn read1ByteTx(&mut self) {}
@@ -385,9 +392,10 @@ impl<'a> DynamixelControl<'a> {
     }
 
     fn set_packet_timeout_length(&mut self, packet_length: usize) {
-        pub const LATENCY_CLOCK: u64 = 1_000;   // usec
+        pub const LATENCY_CLOCK: u64 = 1_000; // usec
         self.packet_start_time = self.clock.get_current_time();
-        let timeout_usec = (self.tx_time_per_byte * packet_length as u64) + (LATENCY_CLOCK * 2) + 2_000;    
+        let timeout_usec =
+            (self.tx_time_per_byte * packet_length as u64) + (LATENCY_CLOCK * 2) + 2_000;
         self.set_packet_timeout_micros(timeout_usec);
     }
 
@@ -401,15 +409,13 @@ impl<'a> DynamixelControl<'a> {
         self.packet_timeout = Duration::from_micros(usec)
     }
 
-    fn is_packet_timeout(&self) -> bool{
+    fn is_packet_timeout(&self) -> bool {
         if self.clock.get_current_time() > self.packet_start_time + self.packet_timeout {
             true
-        }
-        else {
+        } else {
             false
         }
     }
-
 }
 
 #[cfg(test)]
@@ -418,8 +424,8 @@ mod tests {
     use crate::ControlTable;
     use crate::DynamixelControl;
     use crate::Instruction;
-    use core::time::Duration;
     use core::cell::RefCell;
+    use core::time::Duration;
     use heapless::Deque;
     use heapless::Vec;
 
@@ -519,7 +525,6 @@ mod tests {
         assert_eq!(dxl.is_packet_timeout(), false);
         mock_clock.tick();
         assert_eq!(dxl.is_packet_timeout(), true);
-
     }
 
     #[test]
@@ -531,5 +536,4 @@ mod tests {
         assert_eq!(cell, RefCell::new(6));
         assert_eq!(cell.clone().into_inner(), 6);
     }
-
 }

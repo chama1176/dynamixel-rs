@@ -30,7 +30,6 @@ pub struct DynamixelControl<'a> {
 }
 
 impl<'a> DynamixelControl<'a> {
-
     pub fn new(uart: &'a mut dyn Interface, clock: &'a dyn Clock) -> Self {
         Self {
             uart,
@@ -98,10 +97,11 @@ mod tests {
     use crate::ControlTable;
     use crate::DynamixelControl;
     use crate::Instruction;
-    use core::time::Duration;
     use core::cell::RefCell;
+    use core::time::Duration;
     use heapless::Deque;
     use heapless::Vec;
+    use crate::packet_handler::CommunicationResult;
 
     pub struct MockSerial {
         rx_buf: Vec<u8, 256>,
@@ -120,7 +120,7 @@ mod tests {
             self.rx_buf.push(data).unwrap();
 
             // For test ping
-            if self.rx_buf.len() > 7 && self.rx_buf[7] == Instruction::Ping.to_value() {
+            if self.tx_buf.len() == 0 && self.rx_buf.len() > 7 && self.rx_buf[7] == Instruction::Ping.to_value() {
                 // ID1(XM430-W210) : For Model Number 1030(0x0406), Version of Firmware 38(0x26)
                 // Instruction Packet ID : 1
                 let res = [
@@ -132,7 +132,7 @@ mod tests {
                 }
             }
             // For test read
-            if self.rx_buf.len() > 7 && self.rx_buf[7] == Instruction::Read.to_value() {
+            if self.tx_buf.len() == 0 && self.rx_buf.len() > 7 && self.rx_buf[7] == Instruction::Read.to_value() {
                 // ID1(XM430-W210) : Present Position(132, 0x0084, 4[byte]) = 166(0x000000A6)
                 let res = [
                     0xFF, 0xFF, 0xFD, 0x00, 0x01, 0x07, 0x00, 0x55, 0x00, 0x06, 0x04, 0x26, 0x65,
@@ -212,11 +212,14 @@ mod tests {
         let mock_clock = MockClock::new();
         let mut dxl = DynamixelControl::new(&mut mock_uart, &mock_clock);
         let mut data = [0; 1];
-        dxl.read(1, ControlTable::PresentPosition, &mut data);
+        let (result, status) = dxl.read(1, ControlTable::PresentPosition);
         assert_eq!(
             *mock_uart.rx_buf,
             [0xFF, 0xFF, 0xFD, 0x00, 0x01, 0x07, 0x00, 0x02, 0x84, 0x00, 0x04, 0x00, 0x1D, 0x15]
         );
+        assert_eq!(result, CommunicationResult::Success);
+
+
     }
 
     #[test]
