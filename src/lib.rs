@@ -94,6 +94,7 @@ impl<'a> DynamixelControl<'a> {
 
 #[cfg(test)]
 mod tests {
+    use crate::packet_handler::CommunicationResult;
     use crate::ControlTable;
     use crate::DynamixelControl;
     use crate::Instruction;
@@ -101,7 +102,6 @@ mod tests {
     use core::time::Duration;
     use heapless::Deque;
     use heapless::Vec;
-    use crate::packet_handler::CommunicationResult;
 
     pub struct MockSerial {
         rx_buf: Vec<u8, 256>,
@@ -120,7 +120,10 @@ mod tests {
             self.rx_buf.push(data).unwrap();
 
             // For test ping
-            if self.tx_buf.len() == 0 && self.rx_buf.len() > 7 && self.rx_buf[7] == Instruction::Ping.to_value() {
+            if self.tx_buf.len() == 0
+                && self.rx_buf.len() > 7
+                && self.rx_buf[7] == Instruction::Ping.to_value()
+            {
                 // ID1(XM430-W210) : For Model Number 1030(0x0406), Version of Firmware 38(0x26)
                 // Instruction Packet ID : 1
                 let res = [
@@ -132,11 +135,14 @@ mod tests {
                 }
             }
             // For test read
-            if self.tx_buf.len() == 0 && self.rx_buf.len() > 7 && self.rx_buf[7] == Instruction::Read.to_value() {
+            if self.tx_buf.len() == 0
+                && self.rx_buf.len() > 7
+                && self.rx_buf[7] == Instruction::Read.to_value()
+            {
                 // ID1(XM430-W210) : Present Position(132, 0x0084, 4[byte]) = 166(0x000000A6)
                 let res = [
-                    0xFF, 0xFF, 0xFD, 0x00, 0x01, 0x07, 0x00, 0x55, 0x00, 0x06, 0x04, 0x26, 0x65,
-                    0x5D,
+                    0xFF, 0xFF, 0xFD, 0x00, 0x01, 0x08, 0x00, 0x55, 0x00, 0xA6, 0x00, 0x00, 0x00,
+                    0x8C, 0xC0,
                 ];
                 for data in res {
                     self.tx_buf.push_back(data).unwrap();
@@ -211,15 +217,35 @@ mod tests {
         let mut mock_uart = MockSerial::new();
         let mock_clock = MockClock::new();
         let mut dxl = DynamixelControl::new(&mut mock_uart, &mock_clock);
-        let mut data = [0; 1];
-        let (result, status) = dxl.read(1, ControlTable::PresentPosition);
+        let (result, data) = dxl.read(
+            1,
+            ControlTable::PresentPosition,
+            ControlTable::PresentPosition.to_size(),
+        );
         assert_eq!(
             *mock_uart.rx_buf,
             [0xFF, 0xFF, 0xFD, 0x00, 0x01, 0x07, 0x00, 0x02, 0x84, 0x00, 0x04, 0x00, 0x1D, 0x15]
         );
         assert_eq!(result, CommunicationResult::Success);
+        assert_eq!(data, (0x000000A6 as u32).to_le_bytes());
+    }
 
-
+    #[test]
+    fn read_4byte() {
+        // ID1(XM430-W210) : Present Position(132, 0x0084, 4[byte]) = 166(0x000000A6)
+        let mut mock_uart = MockSerial::new();
+        let mock_clock = MockClock::new();
+        let mut dxl = DynamixelControl::new(&mut mock_uart, &mock_clock);
+        let (result, data) = dxl.read_4byte(
+            1,
+            ControlTable::PresentPosition,
+        );
+        assert_eq!(
+            *mock_uart.rx_buf,
+            [0xFF, 0xFF, 0xFD, 0x00, 0x01, 0x07, 0x00, 0x02, 0x84, 0x00, 0x04, 0x00, 0x1D, 0x15]
+        );
+        assert_eq!(result, CommunicationResult::Success);
+        assert_eq!(data, 0x000000A6);
     }
 
     #[test]

@@ -3,7 +3,6 @@ use crate::DynamixelControl;
 use crate::Instruction;
 use core::fmt;
 use core::time::Duration;
-use heapless::Deque;
 use heapless::Vec;
 
 pub const MAX_PACKET_LEN: usize = 128;
@@ -66,6 +65,7 @@ pub enum CommunicationResult {
     RxTimeout,
     RxCorrupt,
     NotAvailable,
+    SomethingWentWrong,
 }
 impl fmt::Display for CommunicationResult {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -86,6 +86,9 @@ impl fmt::Display for CommunicationResult {
             CommunicationResult::RxCorrupt => write!(f, "[TxRxResult] Incorrect status packet!"),
             CommunicationResult::NotAvailable => {
                 write!(f, "[TxRxResult] Protocol does not support This function!")
+            }
+            CommunicationResult::SomethingWentWrong => {
+                write!(f, "[TxRxResult] Something went wrong!")
             }
         }
     }
@@ -124,10 +127,10 @@ impl<'a> DynamixelControl<'a> {
     }
 
     fn receive_packet(&mut self) -> (CommunicationResult, Vec<u8, MAX_PACKET_LEN>) {
-        let mut result = CommunicationResult::TxFail;
+        let result;
         let mut wait_length = 11; // minimum length (HEADER0 HEADER1 HEADER2 RESERVED ID LENGTH_L LENGTH_H INST ERROR CRC16_L CRC16_H)
         let mut msg = Vec::<u8, MAX_PACKET_LEN>::new(); // VecDeque is not implemented in heapless.
-        
+
         loop {
             while msg.len() < wait_length {
                 match self.uart.read_byte() {
@@ -241,13 +244,17 @@ impl<'a> DynamixelControl<'a> {
         (result, msg)
     }
 
-    fn send_read_packet(&mut self, id: u8, name: ControlTable) -> CommunicationResult {
+    fn send_read_packet(
+        &mut self,
+        id: u8,
+        data_name: ControlTable,
+        data_size: u16,
+    ) -> CommunicationResult {
         if id >= BROADCAST_ID {
             return CommunicationResult::NotAvailable;
         }
 
-        let address = name.to_address();
-        let size = name.to_size();
+        let address = data_name.to_address();
         let length: u16 = 1 + 2 + 2 + 2; // instruction + adress + data length + crc
         let mut msg = Vec::<u8, MAX_PACKET_LEN>::new();
 
@@ -256,7 +263,7 @@ impl<'a> DynamixelControl<'a> {
         msg.extend(length.to_le_bytes().iter().cloned()); // Set length temporary
         msg.push(Instruction::Read.to_value()).unwrap();
         msg.extend(address.to_le_bytes().iter().cloned());
-        msg.extend(size.to_le_bytes().iter().cloned());
+        msg.extend(data_size.to_le_bytes().iter().cloned());
         let packet_len = msg.len() + 2;
         let result = self.send_packet(msg);
 
@@ -267,44 +274,102 @@ impl<'a> DynamixelControl<'a> {
         result
     }
 
-    fn receive_read_packet(&mut self) -> (CommunicationResult, Vec<u8, MAX_PACKET_LEN>)  {
-        self.receive_packet()
+    fn receive_read_packet(
+        &mut self,
+        id: u8,
+        data_length: u16,
+    ) -> (CommunicationResult, Vec<u8, MAX_PACKET_LEN>) {
+        let mut result;
+        let status;
+        (result, status) = self.receive_packet();
+
+        // header + id + length + instruction + err + param + crc
+
+        // id check
+        if status[Packet::Id.to_pos()] != id {
+            result = CommunicationResult::SomethingWentWrong;
+            return (result, status);
+        }
+
+        // data length check
+        if u16::from_le_bytes([
+            status[Packet::LengthL.to_pos()],
+            status[Packet::LengthH.to_pos()],
+        ]) - 4
+            != data_length
+        {
+            result = CommunicationResult::SomethingWentWrong;
+            return (result, status);
+        }
+
+        let mut data = Vec::<u8, MAX_PACKET_LEN>::new();
+        for i in 0..data_length as usize {
+            data.push(status[Packet::Error.to_pos() + 1 + i]).unwrap();
+        }
+
+        (result, data)
     }
 
     /// TxRx
-    pub fn read(&mut self, id: u8, data_name: ControlTable) -> (CommunicationResult, Vec<u8, MAX_PACKET_LEN>) {
-        let mut result = CommunicationResult::TxFail;
-        let mut status = Vec::<u8, MAX_PACKET_LEN>::new();
-        let size = data_name.to_size() as usize;
-        result = self.send_read_packet(id, data_name);
+    pub fn read(
+        &mut self,
+        id: u8,
+        data_name: ControlTable,
+        data_length: u16,
+    ) -> (CommunicationResult, Vec<u8, MAX_PACKET_LEN>) {
+        let mut result;
+        let mut data = Vec::<u8, MAX_PACKET_LEN>::new();
+
+        result = self.send_read_packet(id, data_name, data_length);
 
         if result != CommunicationResult::Success {
-            return (result, status)
+            return (result, data);
         }
 
-        // let status_len = 4 + 1 + 2 + 1 + 1 + size + 2; // header + id + length + instruction + err + param + crc
-        // for _i in 0..status_len {
-        //     match self.uart.read_byte() {
-        //         None => {}
-        //         Some(data) => {
-        //             status.push(data).unwrap();
-        //         }
-        //     }
-        // }
+        (result, data) = self.receive_read_packet(id, data_length);
 
-        (result, status) = self.receive_read_packet();
-        (result, status)
+        (result, data)
     }
 
-    // fn read1ByteTx(&mut self) {}
-    // fn read1ByteRx(&mut self) {}
-    // fn read1ByteTxRx(&mut self) {}
-    // fn read2ByteTx(&mut self) {}
-    // fn read2ByteRx(&mut self) {}
-    // fn read2ByteTxRx(&mut self) {}
-    // fn read4ByteTx(&mut self) {}
-    // fn read4ByteRx(&mut self) {}
-    // fn read4ByteTxRx(&mut self) {}
+    pub fn send_1byte_read_packet(&mut self, id: u8, data_name: ControlTable) {
+        self.send_read_packet(id, data_name, 1);
+    }
+    pub fn receive_1byte_read_packet(&mut self, id: u8) -> (CommunicationResult, u8) {
+        let (result, data) = self.receive_read_packet(id, 1);
+        (result, u8::from_le_bytes([data[0]]))
+    }
+    pub fn read_1byte(&mut self, id: u8, data_name: ControlTable) -> (CommunicationResult, u8) {
+        let (result, data) = self.read(id, data_name, 1);
+        (result, u8::from_le_bytes([data[0]]))
+    }
+    pub fn send_2byte_read_packet(&mut self, id: u8, data_name: ControlTable) {
+        self.send_read_packet(id, data_name, 2);
+    }
+    pub fn receive_2byte_read_packet(&mut self, id: u8) -> (CommunicationResult, u16) {
+        let (result, data) = self.receive_read_packet(id, 2);
+        (result, u16::from_le_bytes([data[0], data[1]]))
+    }
+    pub fn read_2byte(&mut self, id: u8, data_name: ControlTable) -> (CommunicationResult, u16) {
+        let (result, data) = self.read(id, data_name, 2);
+        (result, u16::from_le_bytes([data[0], data[1]]))
+    }
+    pub fn send_4byte_read_packet(&mut self, id: u8, data_name: ControlTable) {
+        self.send_read_packet(id, data_name, 4);
+    }
+    pub fn receive_4byte_read_packet(&mut self, id: u8) -> (CommunicationResult, u32) {
+        let (result, data) = self.receive_read_packet(id, 4);
+        (
+            result,
+            u32::from_le_bytes([data[0], data[1], data[2], data[3]]),
+        )
+    }
+    pub fn read_4byte(&mut self, id: u8, data_name: ControlTable) -> (CommunicationResult, u32) {
+        let (result, data) = self.read(id, data_name, 4);
+        (
+            result,
+            u32::from_le_bytes([data[0], data[1], data[2], data[3]]),
+        )
+    }
 
     pub fn send_write_packet(
         &mut self,
@@ -444,30 +509,6 @@ mod tests {
     impl crate::Interface for MockSerial {
         fn write_byte(&mut self, data: u8) {
             self.rx_buf.push(data).unwrap();
-
-            // For test ping
-            if self.rx_buf.len() > 7 && self.rx_buf[7] == Instruction::Ping.to_value() {
-                // ID1(XM430-W210) : For Model Number 1030(0x0406), Version of Firmware 38(0x26)
-                // Instruction Packet ID : 1
-                let res = [
-                    0xFF, 0xFF, 0xFD, 0x00, 0x01, 0x07, 0x00, 0x55, 0x00, 0x06, 0x04, 0x26, 0x65,
-                    0x5D,
-                ];
-                for data in res {
-                    self.tx_buf.push_back(data).unwrap();
-                }
-            }
-            // For test read
-            if self.rx_buf.len() > 7 && self.rx_buf[7] == Instruction::Read.to_value() {
-                // ID1(XM430-W210) : Present Position(132, 0x0084, 4[byte]) = 166(0x000000A6)
-                let res = [
-                    0xFF, 0xFF, 0xFD, 0x00, 0x01, 0x07, 0x00, 0x55, 0x00, 0x06, 0x04, 0x26, 0x65,
-                    0x5D,
-                ];
-                for data in res {
-                    self.tx_buf.push_back(data).unwrap();
-                }
-            }
         }
         fn read_byte(&mut self) -> Option<u8> {
             self.tx_buf.pop_front()
