@@ -552,6 +552,22 @@ mod tests {
     }
 
     #[test]
+    #[ignore]
+    fn calc_crc() {
+        let mut mock_uart = MockSerial::new();
+        let mock_clock = MockClock::new();
+        let dxl = DynamixelControl::new(&mut mock_uart, &mock_clock);
+        let mut msg = Vec::<u8, MAX_PACKET_LEN>::new();
+        msg.extend(
+            [0xFF, 0xFF, 0xFD, 0x00, 0x01, 0x05, 0x00, 0x55, 0x00, 0x05]
+                .iter()
+                .cloned(),
+        );
+        // dbg!("{}", dxl.calc_crc_value(&msg));
+        assert_eq!(dxl.calc_crc_value(&msg), 0x0000);
+    }
+
+    #[test]
     fn clock() {
         let mut mock_uart = MockSerial::new();
         let mock_clock = MockClock::new();

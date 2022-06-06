@@ -95,6 +95,7 @@ impl<'a> DynamixelControl<'a> {
 #[cfg(test)]
 mod tests {
     use crate::packet_handler::CommunicationResult;
+    use crate::packet_handler::Packet;
     use crate::ControlTable;
     use crate::DynamixelControl;
     use crate::Instruction;
@@ -121,8 +122,8 @@ mod tests {
 
             // For test ping
             if self.tx_buf.len() == 0
-                && self.rx_buf.len() > 7
-                && self.rx_buf[7] == Instruction::Ping.to_value()
+                && self.rx_buf.len() > 8
+                && self.rx_buf[Packet::Instruction.to_pos()] == Instruction::Ping.to_value()
             {
                 // ID1(XM430-W210) : For Model Number 1030(0x0406), Version of Firmware 38(0x26)
                 // Instruction Packet ID : 1
@@ -134,15 +135,47 @@ mod tests {
                     self.tx_buf.push_back(data).unwrap();
                 }
             }
-            // For test read
+            // For test read(4byte)
             if self.tx_buf.len() == 0
-                && self.rx_buf.len() > 7
-                && self.rx_buf[7] == Instruction::Read.to_value()
+                && self.rx_buf.len() > 8
+                && self.rx_buf[Packet::Instruction.to_pos()] == Instruction::Read.to_value()
+                && self.rx_buf[Packet::Id.to_pos()] == 0x01
+                && self.rx_buf[Packet::Parameter0.to_pos()] == 0x84
             {
                 // ID1(XM430-W210) : Present Position(132, 0x0084, 4[byte]) = 166(0x000000A6)
                 let res = [
                     0xFF, 0xFF, 0xFD, 0x00, 0x01, 0x08, 0x00, 0x55, 0x00, 0xA6, 0x00, 0x00, 0x00,
                     0x8C, 0xC0,
+                ];
+                for data in res {
+                    self.tx_buf.push_back(data).unwrap();
+                }
+            }
+            // For test read(2byte)
+            if self.tx_buf.len() == 0
+                && self.rx_buf.len() > 8
+                && self.rx_buf[Packet::Instruction.to_pos()] == Instruction::Read.to_value()
+                && self.rx_buf[Packet::Id.to_pos()] == 0x01
+                && self.rx_buf[Packet::Parameter0.to_pos()] == 0x26
+            {
+                // ID1(XC330-T181) : Current Limit(38, 0x0026, 2[byte]) = 888(0x0378)
+                let res = [
+                    0xFF, 0xFF, 0xFD, 0x00, 0x01, 0x06, 0x00, 0x55, 0x00, 0x78, 0x03, 0xC9, 0x4B,
+                ];
+                for data in res {
+                    self.tx_buf.push_back(data).unwrap();
+                }
+            }
+            // For test read(1byte)
+            if self.tx_buf.len() == 0
+                && self.rx_buf.len() > 8
+                && self.rx_buf[Packet::Instruction.to_pos()] == Instruction::Read.to_value()
+                && self.rx_buf[Packet::Id.to_pos()] == 0x01
+                && self.rx_buf[Packet::Parameter0.to_pos()] == 0x0B
+            {
+                // ID1(XC330-T181) : Operating Mode(11, 0x000B, 1[byte]) = 5(0x05)
+                let res = [
+                    0xFF, 0xFF, 0xFD, 0x00, 0x01, 0x05, 0x00, 0x55, 0x00, 0x05, 0x4D, 0x21,
                 ];
                 for data in res {
                     self.tx_buf.push_back(data).unwrap();
@@ -236,16 +269,37 @@ mod tests {
         let mut mock_uart = MockSerial::new();
         let mock_clock = MockClock::new();
         let mut dxl = DynamixelControl::new(&mut mock_uart, &mock_clock);
-        let (result, data) = dxl.read_4byte(
-            1,
-            ControlTable::PresentPosition,
-        );
+        let (result, data) = dxl.read_4byte(1, ControlTable::PresentPosition);
         assert_eq!(
             *mock_uart.rx_buf,
             [0xFF, 0xFF, 0xFD, 0x00, 0x01, 0x07, 0x00, 0x02, 0x84, 0x00, 0x04, 0x00, 0x1D, 0x15]
         );
         assert_eq!(result, CommunicationResult::Success);
         assert_eq!(data, 0x000000A6);
+    }
+
+    #[test]
+    fn read_2byte() {
+        // ID1(XC330-T181) : Current Limit(38, 0x0026, 2[byte]) = 888(0x0378)
+        let mut mock_uart = MockSerial::new();
+        let mock_clock = MockClock::new();
+        let mut dxl = DynamixelControl::new(&mut mock_uart, &mock_clock);
+
+        let (result, data) = dxl.read_2byte(1, ControlTable::CurrentLimit);
+        assert_eq!(result, CommunicationResult::Success);
+        assert_eq!(data, 0x0378);
+    }
+
+    #[test]
+    fn read_1byte() {
+        // ID1(XC330-T181) : Operating Mode(11, 0x000B, 1[byte]) = 5(0x05)
+        let mut mock_uart = MockSerial::new();
+        let mock_clock = MockClock::new();
+        let mut dxl = DynamixelControl::new(&mut mock_uart, &mock_clock);
+
+        let (result, data) = dxl.read_1byte(1, ControlTable::OperatingMode);
+        assert_eq!(result, CommunicationResult::Success);
+        assert_eq!(data, 0x05);
     }
 
     #[test]
