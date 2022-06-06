@@ -563,7 +563,6 @@ mod tests {
                 .iter()
                 .cloned(),
         );
-        // dbg!("{}", dxl.calc_crc_value(&msg));
         assert_eq!(dxl.calc_crc_value(&msg), 0x0000);
     }
 
