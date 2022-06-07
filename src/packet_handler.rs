@@ -41,16 +41,25 @@ impl Packet {
 }
 
 #[allow(dead_code)]
-#[derive(Debug)]
+#[derive(Clone, Copy, Debug, PartialEq)]
+#[repr(u8)]
 pub enum ErrorBit {
-    ErrResultFail,
-    ErrInstruction,
-    ErrCRC,
-    ErrDataRange,
-    ErrDataLength,
-    ErrDataLimit,
-    ErrAccess,
-    ErrAlert,
+    ErrNone = 0x00,
+    ErrResultFail = 0x01,
+    ErrInstruction = 0x02,
+    ErrCRC = 0x03,
+    ErrDataRange = 0x04,
+    ErrDataLength = 0x05,
+    ErrDataLimit = 0x06,
+    ErrAccess = 0x07,
+    ErrAlert = 0x08,
+}
+
+impl From<ErrorBit> for u8 {
+    #[inline(always)]
+    fn from(variant: ErrorBit) -> Self {
+        variant as _
+    }
 }
 
 #[allow(dead_code)]
@@ -67,6 +76,7 @@ pub enum CommunicationResult {
     NotAvailable,
     SomethingWentWrong,
 }
+
 impl fmt::Display for CommunicationResult {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
@@ -110,11 +120,6 @@ impl<'a> DynamixelControl<'a> {
         msg[Packet::Header1.to_pos()] = 0xFF;
         msg[Packet::Header2.to_pos()] = 0xFD;
         msg[Packet::Reserved.to_pos()] = 0x00;
-
-        // msg.extend(self.make_msg_header().iter().cloned());
-        // // msg.push(id).unwrap();
-        // msg.extend(length.to_le_bytes().iter().cloned());       // Set length temporary
-        // msg.push(Instruction::Ping.to_value()).unwrap();
 
         // add crc
         msg.extend(self.calc_crc_value(&msg).to_le_bytes().iter().cloned());
@@ -374,15 +379,15 @@ impl<'a> DynamixelControl<'a> {
     pub fn send_write_packet(
         &mut self,
         id: u8,
-        name: ControlTable,
+        data_name: ControlTable,
         data: &[u8],
     ) -> CommunicationResult {
         if id >= BROADCAST_ID {
             return CommunicationResult::NotAvailable;
         }
 
-        let address = name.to_address();
-        let size = name.to_size();
+        let address = data_name.to_address();
+        let size = data_name.to_size();
         let length: u16 = 1 + 2 + (data.len() as u16) + 2; // instruction + adress + data + crc
 
         if size != data.len() as u16 {
@@ -404,7 +409,50 @@ impl<'a> DynamixelControl<'a> {
     }
 
     /// TxRx
-    pub fn write(&mut self, id: u8, address: u16, data: &[u8]) {}
+    pub fn write(
+        &mut self,
+        id: u8,
+        data_name: ControlTable,
+        data: &[u8],
+    ) -> CommunicationResult {
+        let mut result;
+        result = self.send_write_packet(id, data_name, data);
+
+        if result != CommunicationResult::Success {
+            return result;
+        }
+
+        let status;
+        (result, status) = self.receive_packet();
+
+        // header + id + length + instruction + err + param + crc
+        // id check
+        if status[Packet::Id.to_pos()] != id {
+            result = CommunicationResult::SomethingWentWrong;
+            return result;
+        }
+        // data length check
+        if u16::from_le_bytes([
+            status[Packet::LengthL.to_pos()],
+            status[Packet::LengthH.to_pos()],
+        ]) - 4
+            != 0
+        {
+            result = CommunicationResult::SomethingWentWrong;
+            return result;
+        }
+        // instruction check
+        if status[Packet::Instruction.to_pos()] != Instruction::Status as u8 {
+            result = CommunicationResult::SomethingWentWrong;
+            return result;
+        }
+        if status[Packet::Error.to_pos()] != 0x00 {
+            result = CommunicationResult::SomethingWentWrong;
+            return result;
+        }
+
+        result
+    }
 
     // fn write1ByteTx(&mut self) {}
     // fn write1ByteTxRx(&mut self) {}

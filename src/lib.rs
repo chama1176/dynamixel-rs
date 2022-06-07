@@ -181,6 +181,21 @@ mod tests {
                     self.tx_buf.push_back(data).unwrap();
                 }
             }
+            // For test write(4byte)
+            if self.tx_buf.len() == 0
+                && self.rx_buf.len() > 15
+                && self.rx_buf[Packet::Instruction.to_pos()] == Instruction::Write.into()
+                && self.rx_buf[Packet::Id.to_pos()] == 0x01
+                && self.rx_buf[Packet::Parameter0.to_pos()] == 0x74
+            {
+                // ID1(XM430-W210) : Write 512(0x00000200) to Goal Position(116, 0x0074, 4[byte])
+                let res = [
+                    0xFF, 0xFF, 0xFD, 0x00, 0x01, 0x04, 0x00, 0x55, 0x00, 0xA1, 0x0C,
+                ];
+                for data in res {
+                    self.tx_buf.push_back(data).unwrap();
+                }
+            }
         }
         fn read_byte(&mut self) -> Option<u8> {
             self.tx_buf.pop_front()
@@ -309,7 +324,7 @@ mod tests {
         let mock_clock = MockClock::new();
         let mut dxl = DynamixelControl::new(&mut mock_uart, &mock_clock);
         let data: u32 = 0x00000200;
-        dxl.send_write_packet(1, ControlTable::GoalPosition, &data.to_le_bytes());
+        let result = dxl.write(1, ControlTable::GoalPosition, &data.to_le_bytes());
         assert_eq!(
             *mock_uart.rx_buf,
             [
@@ -317,6 +332,7 @@ mod tests {
                 0xCA, 0x89
             ]
         );
+        assert_eq!(result, CommunicationResult::Success);
     }
 
     #[test]

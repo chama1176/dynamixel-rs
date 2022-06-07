@@ -28,7 +28,6 @@ impl From<Instruction> for u8 {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use crate::Instruction;
@@ -36,7 +35,7 @@ mod tests {
     fn to_u8() {
         assert_eq!(Instruction::Clear as u8, 0x10);
         assert_eq!(u8::from(Instruction::Clear), 0x10);
-        
+
         let s: u8 = Instruction::Clear.into();
         assert_eq!(s, 0x10);
     }
