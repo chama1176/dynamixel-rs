@@ -261,7 +261,7 @@ impl<'a> DynamixelControl<'a> {
         msg.extend(self.reserve_msg_header().iter().cloned());
         msg.push(id).unwrap();
         msg.extend(length.to_le_bytes().iter().cloned()); // Set length temporary
-        msg.push(Instruction::Read.to_value()).unwrap();
+        msg.push(Instruction::Read as u8).unwrap();
         msg.extend(address.to_le_bytes().iter().cloned());
         msg.extend(data_size.to_le_bytes().iter().cloned());
         let packet_len = msg.len() + 2;
@@ -393,7 +393,7 @@ impl<'a> DynamixelControl<'a> {
         msg.extend(self.reserve_msg_header().iter().cloned());
         msg.push(id).unwrap();
         msg.extend(length.to_le_bytes().iter().cloned()); // Set length temporary
-        msg.push(Instruction::Write.to_value()).unwrap();
+        msg.push(Instruction::Write as u8).unwrap();
         msg.extend(address.to_le_bytes().iter().cloned());
 
         for d in data {

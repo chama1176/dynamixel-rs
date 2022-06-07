@@ -62,7 +62,7 @@ impl<'a> DynamixelControl<'a> {
         msg.extend(self.reserve_msg_header().iter().cloned());
         msg.push(id).unwrap();
         msg.extend(length.to_le_bytes().iter().cloned()); // Set length temporary
-        msg.push(Instruction::Ping.to_value()).unwrap();
+        msg.push(Instruction::Ping as u8).unwrap();
 
         self.send_packet(msg);
 
@@ -123,7 +123,7 @@ mod tests {
             // For test ping
             if self.tx_buf.len() == 0
                 && self.rx_buf.len() > 8
-                && self.rx_buf[Packet::Instruction.to_pos()] == Instruction::Ping.to_value()
+                && self.rx_buf[Packet::Instruction.to_pos()] == Instruction::Ping.into()
             {
                 // ID1(XM430-W210) : For Model Number 1030(0x0406), Version of Firmware 38(0x26)
                 // Instruction Packet ID : 1
@@ -138,7 +138,7 @@ mod tests {
             // For test read(4byte)
             if self.tx_buf.len() == 0
                 && self.rx_buf.len() > 8
-                && self.rx_buf[Packet::Instruction.to_pos()] == Instruction::Read.to_value()
+                && self.rx_buf[Packet::Instruction.to_pos()] == Instruction::Read.into()
                 && self.rx_buf[Packet::Id.to_pos()] == 0x01
                 && self.rx_buf[Packet::Parameter0.to_pos()] == 0x84
             {
@@ -154,7 +154,7 @@ mod tests {
             // For test read(2byte)
             if self.tx_buf.len() == 0
                 && self.rx_buf.len() > 8
-                && self.rx_buf[Packet::Instruction.to_pos()] == Instruction::Read.to_value()
+                && self.rx_buf[Packet::Instruction.to_pos()] == Instruction::Read.into()
                 && self.rx_buf[Packet::Id.to_pos()] == 0x01
                 && self.rx_buf[Packet::Parameter0.to_pos()] == 0x26
             {
@@ -169,7 +169,7 @@ mod tests {
             // For test read(1byte)
             if self.tx_buf.len() == 0
                 && self.rx_buf.len() > 8
-                && self.rx_buf[Packet::Instruction.to_pos()] == Instruction::Read.to_value()
+                && self.rx_buf[Packet::Instruction.to_pos()] == Instruction::Read.into()
                 && self.rx_buf[Packet::Id.to_pos()] == 0x01
                 && self.rx_buf[Packet::Parameter0.to_pos()] == 0x0B
             {
