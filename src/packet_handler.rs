@@ -135,7 +135,7 @@ impl<'a> DynamixelControl<'a> {
         Ok(())
     }
 
-    fn receive_packet(&mut self) -> (CommunicationResult, Vec<u8, MAX_PACKET_LEN>) {
+    fn receive_packet(&mut self) -> Result<Vec<u8, MAX_PACKET_LEN>, CommunicationResult> {
         let result;
         let mut wait_length = 11; // minimum length (HEADER0 HEADER1 HEADER2 RESERVED ID LENGTH_L LENGTH_H INST ERROR CRC16_L CRC16_H)
         let mut msg = Vec::<u8, MAX_PACKET_LEN>::new(); // VecDeque is not implemented in heapless.
@@ -250,7 +250,11 @@ impl<'a> DynamixelControl<'a> {
             // removeStuffing(rxpacket);
         }
 
-        (result, msg)
+        if result == CommunicationResult::Success {
+            Ok(msg)
+        } else {
+            Err(result)
+        }
     }
 
     fn send_read_packet(
@@ -258,9 +262,9 @@ impl<'a> DynamixelControl<'a> {
         id: u8,
         data_name: ControlTable,
         data_size: u16,
-    ) -> CommunicationResult {
+    ) -> Result<(), CommunicationResult> {
         if id >= BROADCAST_ID {
-            return CommunicationResult::NotAvailable;
+            return Err(CommunicationResult::NotAvailable);
         }
 
         let address = data_name.to_address();
@@ -277,9 +281,9 @@ impl<'a> DynamixelControl<'a> {
         match self.send_packet(msg) {
             Ok(_) => {
                 self.set_packet_timeout_length(packet_len);
-                return CommunicationResult::Success;
+                Ok(())
             }
-            Err(e) => return e,
+            Err(e) => Err(e),
         }
     }
 
@@ -287,17 +291,20 @@ impl<'a> DynamixelControl<'a> {
         &mut self,
         id: u8,
         data_length: u16,
-    ) -> (CommunicationResult, Vec<u8, MAX_PACKET_LEN>) {
-        let mut result;
+    ) -> Result<Vec<u8, MAX_PACKET_LEN>, CommunicationResult> {
         let status;
-        (result, status) = self.receive_packet();
+        match self.receive_packet() {
+            Ok(v) => {
+                status = v;
+            }
+            Err(e) => return Err(e),
+        }
 
         // header + id + length + instruction + err + param + crc
 
         // id check
         if status[Packet::Id.to_pos()] != id {
-            result = CommunicationResult::SomethingWentWrong;
-            return (result, status);
+            return Err(CommunicationResult::SomethingWentWrong);
         }
 
         // data length check
@@ -307,8 +314,7 @@ impl<'a> DynamixelControl<'a> {
         ]) - 4
             != data_length
         {
-            result = CommunicationResult::SomethingWentWrong;
-            return (result, status);
+            return Err(CommunicationResult::SomethingWentWrong);
         }
 
         let mut data = Vec::<u8, MAX_PACKET_LEN>::new();
@@ -316,7 +322,7 @@ impl<'a> DynamixelControl<'a> {
             data.push(status[Packet::Error.to_pos() + 1 + i]).unwrap();
         }
 
-        (result, data)
+        Ok(data)
     }
 
     /// TxRx
@@ -325,59 +331,70 @@ impl<'a> DynamixelControl<'a> {
         id: u8,
         data_name: ControlTable,
         data_length: u16,
-    ) -> (CommunicationResult, Vec<u8, MAX_PACKET_LEN>) {
-        let mut result;
-        let mut data = Vec::<u8, MAX_PACKET_LEN>::new();
-
-        result = self.send_read_packet(id, data_name, data_length);
-
-        if result != CommunicationResult::Success {
-            return (result, data);
+    ) -> Result<Vec<u8, MAX_PACKET_LEN>, CommunicationResult> {
+        match self.send_read_packet(id, data_name, data_length) {
+            Ok(v) => {}
+            Err(e) => return Err(e),
         }
-
-        (result, data) = self.receive_read_packet(id, data_length);
-
-        (result, data)
+        self.receive_read_packet(id, data_length)
     }
 
     pub fn send_1byte_read_packet(&mut self, id: u8, data_name: ControlTable) {
         self.send_read_packet(id, data_name, 1);
     }
-    pub fn receive_1byte_read_packet(&mut self, id: u8) -> (CommunicationResult, u8) {
-        let (result, data) = self.receive_read_packet(id, 1);
-        (result, u8::from_le_bytes([data[0]]))
+    pub fn receive_1byte_read_packet(&mut self, id: u8) -> Result<u8, CommunicationResult> {
+        match self.receive_read_packet(id, 1) {
+            Ok(v) => Ok(u8::from_le_bytes([v[0]])),
+            Err(e) => Err(e),
+        }
     }
-    pub fn read_1byte(&mut self, id: u8, data_name: ControlTable) -> (CommunicationResult, u8) {
-        let (result, data) = self.read(id, data_name, 1);
-        (result, u8::from_le_bytes([data[0]]))
+    pub fn read_1byte(
+        &mut self,
+        id: u8,
+        data_name: ControlTable,
+    ) -> Result<u8, CommunicationResult> {
+        match self.read(id, data_name, 1) {
+            Ok(v) => Ok(u8::from_le_bytes([v[0]])),
+            Err(e) => Err(e),
+        }
     }
     pub fn send_2byte_read_packet(&mut self, id: u8, data_name: ControlTable) {
         self.send_read_packet(id, data_name, 2);
     }
-    pub fn receive_2byte_read_packet(&mut self, id: u8) -> (CommunicationResult, u16) {
-        let (result, data) = self.receive_read_packet(id, 2);
-        (result, u16::from_le_bytes([data[0], data[1]]))
+    pub fn receive_2byte_read_packet(&mut self, id: u8) -> Result<u16, CommunicationResult> {
+        match self.receive_read_packet(id, 2) {
+            Ok(v) => Ok(u16::from_le_bytes([v[0], v[1]])),
+            Err(e) => Err(e),
+        }
     }
-    pub fn read_2byte(&mut self, id: u8, data_name: ControlTable) -> (CommunicationResult, u16) {
-        let (result, data) = self.read(id, data_name, 2);
-        (result, u16::from_le_bytes([data[0], data[1]]))
+    pub fn read_2byte(
+        &mut self,
+        id: u8,
+        data_name: ControlTable,
+    ) -> Result<u16, CommunicationResult> {
+        match self.read(id, data_name, 2) {
+            Ok(v) => Ok(u16::from_le_bytes([v[0], v[1]])),
+            Err(e) => Err(e),
+        }
     }
     pub fn send_4byte_read_packet(&mut self, id: u8, data_name: ControlTable) {
         self.send_read_packet(id, data_name, 4);
     }
-    pub fn receive_4byte_read_packet(&mut self, id: u8) -> (CommunicationResult, u32) {
-        let (result, data) = self.receive_read_packet(id, 4);
-        (
-            result,
-            u32::from_le_bytes([data[0], data[1], data[2], data[3]]),
-        )
+    pub fn receive_4byte_read_packet(&mut self, id: u8) -> Result<u32, CommunicationResult> {
+        match self.receive_read_packet(id, 4) {
+            Ok(v) => Ok(u32::from_le_bytes([v[0], v[1], v[2], v[3]])),
+            Err(e) => Err(e),
+        }
     }
-    pub fn read_4byte(&mut self, id: u8, data_name: ControlTable) -> (CommunicationResult, u32) {
-        let (result, data) = self.read(id, data_name, 4);
-        (
-            result,
-            u32::from_le_bytes([data[0], data[1], data[2], data[3]]),
-        )
+    pub fn read_4byte(
+        &mut self,
+        id: u8,
+        data_name: ControlTable,
+    ) -> Result<u32, CommunicationResult> {
+        match self.read(id, data_name, 4) {
+            Ok(v) => Ok(u32::from_le_bytes([v[0], v[1], v[2], v[3]])),
+            Err(e) => Err(e),
+        }
     }
 
     pub fn send_write_packet(
@@ -423,15 +440,16 @@ impl<'a> DynamixelControl<'a> {
             Ok(_) => {}
             Err(e) => return Err(e),
         }
-        let mut result;
         let status;
-        (result, status) = self.receive_packet();
+        match self.receive_packet() {
+            Ok(v) => status = v,
+            Err(e) => return Err(e),
+        }
 
         // header + id + length + instruction + err + param + crc
         // id check
         if status[Packet::Id.to_pos()] != id {
-            result = CommunicationResult::SomethingWentWrong;
-            return Err(result);
+            return Err(CommunicationResult::SomethingWentWrong);
         }
         // data length check
         if u16::from_le_bytes([
@@ -440,17 +458,14 @@ impl<'a> DynamixelControl<'a> {
         ]) - 4
             != 0
         {
-            result = CommunicationResult::SomethingWentWrong;
-            return Err(result);
+            return Err(CommunicationResult::SomethingWentWrong);
         }
         // instruction check
         if status[Packet::Instruction.to_pos()] != Instruction::Status as u8 {
-            result = CommunicationResult::SomethingWentWrong;
-            return Err(result);
+            return Err(CommunicationResult::SomethingWentWrong);
         }
         if status[Packet::Error.to_pos()] != 0x00 {
-            result = CommunicationResult::SomethingWentWrong;
-            return Err(result);
+            return Err(CommunicationResult::SomethingWentWrong);
         }
 
         Ok(())

@@ -265,7 +265,7 @@ mod tests {
         let mut mock_uart = MockSerial::new();
         let mock_clock = MockClock::new();
         let mut dxl = DynamixelControl::new(&mut mock_uart, &mock_clock);
-        let (result, data) = dxl.read(
+        let result = dxl.read(
             1,
             ControlTable::PresentPosition,
             ControlTable::PresentPosition.to_size(),
@@ -274,8 +274,8 @@ mod tests {
             *mock_uart.rx_buf,
             [0xFF, 0xFF, 0xFD, 0x00, 0x01, 0x07, 0x00, 0x02, 0x84, 0x00, 0x04, 0x00, 0x1D, 0x15]
         );
-        assert_eq!(result, CommunicationResult::Success);
-        assert_eq!(data, (0x000000A6 as u32).to_le_bytes());
+        assert_eq!(result.is_ok(), true);
+        assert_eq!(result.unwrap(), (0x000000A6 as u32).to_le_bytes());
     }
 
     #[test]
@@ -284,13 +284,13 @@ mod tests {
         let mut mock_uart = MockSerial::new();
         let mock_clock = MockClock::new();
         let mut dxl = DynamixelControl::new(&mut mock_uart, &mock_clock);
-        let (result, data) = dxl.read_4byte(1, ControlTable::PresentPosition);
+        let result = dxl.read_4byte(1, ControlTable::PresentPosition);
         assert_eq!(
             *mock_uart.rx_buf,
             [0xFF, 0xFF, 0xFD, 0x00, 0x01, 0x07, 0x00, 0x02, 0x84, 0x00, 0x04, 0x00, 0x1D, 0x15]
         );
-        assert_eq!(result, CommunicationResult::Success);
-        assert_eq!(data, 0x000000A6);
+        assert_eq!(result.is_ok(), true);
+        assert_eq!(result, Ok(0x000000A6));
     }
 
     #[test]
@@ -300,9 +300,9 @@ mod tests {
         let mock_clock = MockClock::new();
         let mut dxl = DynamixelControl::new(&mut mock_uart, &mock_clock);
 
-        let (result, data) = dxl.read_2byte(1, ControlTable::CurrentLimit);
-        assert_eq!(result, CommunicationResult::Success);
-        assert_eq!(data, 0x0378);
+        let result = dxl.read_2byte(1, ControlTable::CurrentLimit);
+        assert_eq!(result.is_ok(), true);
+        assert_eq!(result, Ok(0x0378));
     }
 
     #[test]
@@ -312,9 +312,9 @@ mod tests {
         let mock_clock = MockClock::new();
         let mut dxl = DynamixelControl::new(&mut mock_uart, &mock_clock);
 
-        let (result, data) = dxl.read_1byte(1, ControlTable::OperatingMode);
-        assert_eq!(result, CommunicationResult::Success);
-        assert_eq!(data, 0x05);
+        let result = dxl.read_1byte(1, ControlTable::OperatingMode);
+        assert_eq!(result.is_ok(), true);
+        assert_eq!(result, Ok(0x05));
     }
 
     #[test]
