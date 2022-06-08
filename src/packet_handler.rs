@@ -2,6 +2,7 @@ use crate::ControlTable;
 use crate::DynamixelControl;
 use crate::Instruction;
 use core::fmt;
+use core::result::Result;
 use core::time::Duration;
 use heapless::Vec;
 
@@ -114,7 +115,10 @@ impl<'a> DynamixelControl<'a> {
     fn remove_stuffing(&mut self) {}
 
     /// Set packet without crc.
-    pub fn send_packet(&mut self, mut msg: Vec<u8, MAX_PACKET_LEN>) -> CommunicationResult {
+    pub fn send_packet(
+        &mut self,
+        mut msg: Vec<u8, MAX_PACKET_LEN>,
+    ) -> Result<(), CommunicationResult> {
         // make header
         msg[Packet::Header0.to_pos()] = 0xFF;
         msg[Packet::Header1.to_pos()] = 0xFF;
@@ -128,7 +132,7 @@ impl<'a> DynamixelControl<'a> {
             self.uart.write_byte(m);
         }
 
-        CommunicationResult::Success
+        Ok(())
     }
 
     fn receive_packet(&mut self) -> (CommunicationResult, Vec<u8, MAX_PACKET_LEN>) {
@@ -270,13 +274,13 @@ impl<'a> DynamixelControl<'a> {
         msg.extend(address.to_le_bytes().iter().cloned());
         msg.extend(data_size.to_le_bytes().iter().cloned());
         let packet_len = msg.len() + 2;
-        let result = self.send_packet(msg);
-
-        if result == CommunicationResult::Success {
-            self.set_packet_timeout_length(packet_len);
+        match self.send_packet(msg) {
+            Ok(_) => {
+                self.set_packet_timeout_length(packet_len);
+                return CommunicationResult::Success;
+            }
+            Err(e) => return e,
         }
-
-        result
     }
 
     fn receive_read_packet(
@@ -381,9 +385,9 @@ impl<'a> DynamixelControl<'a> {
         id: u8,
         data_name: ControlTable,
         data: &[u8],
-    ) -> CommunicationResult {
+    ) -> Result<(), CommunicationResult> {
         if id >= BROADCAST_ID {
-            return CommunicationResult::NotAvailable;
+            return Err(CommunicationResult::NotAvailable);
         }
 
         let address = data_name.to_address();
@@ -391,7 +395,7 @@ impl<'a> DynamixelControl<'a> {
         let length: u16 = 1 + 2 + (data.len() as u16) + 2; // instruction + adress + data + crc
 
         if size != data.len() as u16 {
-            return CommunicationResult::NotAvailable;
+            return Err(CommunicationResult::NotAvailable);
         }
 
         let mut msg = Vec::<u8, MAX_PACKET_LEN>::new();
@@ -414,14 +418,12 @@ impl<'a> DynamixelControl<'a> {
         id: u8,
         data_name: ControlTable,
         data: &[u8],
-    ) -> CommunicationResult {
-        let mut result;
-        result = self.send_write_packet(id, data_name, data);
-
-        if result != CommunicationResult::Success {
-            return result;
+    ) -> Result<(), CommunicationResult> {
+        match self.send_write_packet(id, data_name, data) {
+            Ok(_) => {}
+            Err(e) => return Err(e),
         }
-
+        let mut result;
         let status;
         (result, status) = self.receive_packet();
 
@@ -429,7 +431,7 @@ impl<'a> DynamixelControl<'a> {
         // id check
         if status[Packet::Id.to_pos()] != id {
             result = CommunicationResult::SomethingWentWrong;
-            return result;
+            return Err(result);
         }
         // data length check
         if u16::from_le_bytes([
@@ -439,27 +441,40 @@ impl<'a> DynamixelControl<'a> {
             != 0
         {
             result = CommunicationResult::SomethingWentWrong;
-            return result;
+            return Err(result);
         }
         // instruction check
         if status[Packet::Instruction.to_pos()] != Instruction::Status as u8 {
             result = CommunicationResult::SomethingWentWrong;
-            return result;
+            return Err(result);
         }
         if status[Packet::Error.to_pos()] != 0x00 {
             result = CommunicationResult::SomethingWentWrong;
-            return result;
+            return Err(result);
         }
 
-        result
+        Ok(())
     }
 
-    // fn write1ByteTx(&mut self) {}
-    // fn write1ByteTxRx(&mut self) {}
-    // fn write2ByteTx(&mut self) {}
-    // fn write2ByteTxRx(&mut self) {}
-    // fn write4ByteTx(&mut self) {}
-    // fn write4ByteTxRx(&mut self) {}
+    // pub fn send_1byte_write_packet(&mut self, id: u8, data_name: ControlTable, data: u8) -> CommunicationResult {
+    //     self.send_write_packet(id, data_name, &[data])
+    // }
+    // pub fn write_1byte(&mut self, id: u8, data_name: ControlTable, data: u8) -> CommunicationResult {
+    //     self.write(id, data_name, &[data])
+    // }
+    // pub fn send_2byte_write_packet(&mut self, id: u8, data_name: ControlTable, data: u16) -> CommunicationResult {
+    //     self.send_write_packet(id, data_name, &data.to_le_bytes())
+    // }
+    // pub fn write_2byte(&mut self, id: u8, data_name: ControlTable, data: u16) -> CommunicationResult {
+    //     self.write(id, data_name, &data.to_le_bytes())
+    // }
+    // pub fn send_4byte_write_packet(&mut self, id: u8, data_name: ControlTable, data: u16) -> CommunicationResult {
+    //     self.send_write_packet(id, data_name, &data.to_le_bytes())
+    // }
+    // pub fn write_4byte(&mut self, id: u8, data_name: ControlTable, data: u16) -> CommunicationResult {
+    //     self.write(id, data_name, &data.to_le_bytes())
+    // }
+
     // regWriteTxOnly
     // regWriteTxRx
     // syncReadTx

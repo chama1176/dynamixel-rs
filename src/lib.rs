@@ -332,7 +332,7 @@ mod tests {
                 0xCA, 0x89
             ]
         );
-        assert_eq!(result, CommunicationResult::Success);
+        assert_eq!(result.is_ok(), true);
     }
 
     #[test]
