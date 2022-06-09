@@ -333,14 +333,18 @@ impl<'a> DynamixelControl<'a> {
         data_length: u16,
     ) -> Result<Vec<u8, MAX_PACKET_LEN>, CommunicationResult> {
         match self.send_read_packet(id, data_name, data_length) {
-            Ok(v) => {}
+            Ok(_) => {}
             Err(e) => return Err(e),
         }
         self.receive_read_packet(id, data_length)
     }
 
-    pub fn send_1byte_read_packet(&mut self, id: u8, data_name: ControlTable) {
-        self.send_read_packet(id, data_name, 1);
+    pub fn send_1byte_read_packet(
+        &mut self,
+        id: u8,
+        data_name: ControlTable,
+    ) -> Result<(), CommunicationResult> {
+        self.send_read_packet(id, data_name, 1)
     }
     pub fn receive_1byte_read_packet(&mut self, id: u8) -> Result<u8, CommunicationResult> {
         match self.receive_read_packet(id, 1) {
@@ -358,8 +362,12 @@ impl<'a> DynamixelControl<'a> {
             Err(e) => Err(e),
         }
     }
-    pub fn send_2byte_read_packet(&mut self, id: u8, data_name: ControlTable) {
-        self.send_read_packet(id, data_name, 2);
+    pub fn send_2byte_read_packet(
+        &mut self,
+        id: u8,
+        data_name: ControlTable,
+    ) -> Result<(), CommunicationResult> {
+        self.send_read_packet(id, data_name, 2)
     }
     pub fn receive_2byte_read_packet(&mut self, id: u8) -> Result<u16, CommunicationResult> {
         match self.receive_read_packet(id, 2) {
@@ -377,8 +385,12 @@ impl<'a> DynamixelControl<'a> {
             Err(e) => Err(e),
         }
     }
-    pub fn send_4byte_read_packet(&mut self, id: u8, data_name: ControlTable) {
-        self.send_read_packet(id, data_name, 4);
+    pub fn send_4byte_read_packet(
+        &mut self,
+        id: u8,
+        data_name: ControlTable,
+    ) -> Result<(), CommunicationResult> {
+        self.send_read_packet(id, data_name, 4)
     }
     pub fn receive_4byte_read_packet(&mut self, id: u8) -> Result<u32, CommunicationResult> {
         match self.receive_read_packet(id, 4) {
@@ -471,24 +483,54 @@ impl<'a> DynamixelControl<'a> {
         Ok(())
     }
 
-    // pub fn send_1byte_write_packet(&mut self, id: u8, data_name: ControlTable, data: u8) -> CommunicationResult {
-    //     self.send_write_packet(id, data_name, &[data])
-    // }
-    // pub fn write_1byte(&mut self, id: u8, data_name: ControlTable, data: u8) -> CommunicationResult {
-    //     self.write(id, data_name, &[data])
-    // }
-    // pub fn send_2byte_write_packet(&mut self, id: u8, data_name: ControlTable, data: u16) -> CommunicationResult {
-    //     self.send_write_packet(id, data_name, &data.to_le_bytes())
-    // }
-    // pub fn write_2byte(&mut self, id: u8, data_name: ControlTable, data: u16) -> CommunicationResult {
-    //     self.write(id, data_name, &data.to_le_bytes())
-    // }
-    // pub fn send_4byte_write_packet(&mut self, id: u8, data_name: ControlTable, data: u16) -> CommunicationResult {
-    //     self.send_write_packet(id, data_name, &data.to_le_bytes())
-    // }
-    // pub fn write_4byte(&mut self, id: u8, data_name: ControlTable, data: u16) -> CommunicationResult {
-    //     self.write(id, data_name, &data.to_le_bytes())
-    // }
+    pub fn send_1byte_write_packet(
+        &mut self,
+        id: u8,
+        data_name: ControlTable,
+        data: u8,
+    ) -> Result<(), CommunicationResult> {
+        self.send_write_packet(id, data_name, &[data])
+    }
+    pub fn write_1byte(
+        &mut self,
+        id: u8,
+        data_name: ControlTable,
+        data: u8,
+    ) -> Result<(), CommunicationResult> {
+        self.write(id, data_name, &[data])
+    }
+    pub fn send_2byte_write_packet(
+        &mut self,
+        id: u8,
+        data_name: ControlTable,
+        data: u16,
+    ) -> Result<(), CommunicationResult> {
+        self.send_write_packet(id, data_name, &data.to_le_bytes())
+    }
+    pub fn write_2byte(
+        &mut self,
+        id: u8,
+        data_name: ControlTable,
+        data: u16,
+    ) -> Result<(), CommunicationResult> {
+        self.write(id, data_name, &data.to_le_bytes())
+    }
+    pub fn send_4byte_write_packet(
+        &mut self,
+        id: u8,
+        data_name: ControlTable,
+        data: u32,
+    ) -> Result<(), CommunicationResult> {
+        self.send_write_packet(id, data_name, &data.to_le_bytes())
+    }
+    pub fn write_4byte(
+        &mut self,
+        id: u8,
+        data_name: ControlTable,
+        data: u32,
+    ) -> Result<(), CommunicationResult> {
+        self.write(id, data_name, &data.to_le_bytes())
+    }
 
     // regWriteTxOnly
     // regWriteTxRx
@@ -497,7 +539,7 @@ impl<'a> DynamixelControl<'a> {
     // bulkReadTx
     // bulkWriteTxOnly
 
-    pub fn calc_crc_value(&self, msg: &[u8]) -> u16 {
+    fn calc_crc_value(&self, msg: &[u8]) -> u16 {
         let crc_table = [
             0x0000, 0x8005, 0x800F, 0x000A, 0x801B, 0x001E, 0x0014, 0x8011, 0x8033, 0x0036, 0x003C,
             0x8039, 0x0028, 0x802D, 0x8027, 0x0022, 0x8063, 0x0066, 0x006C, 0x8069, 0x0078, 0x807D,
