@@ -54,44 +54,6 @@ impl<'a> DynamixelControl<'a> {
         self.uart.write_byte(0x6c);
         self.uart.write_byte(0x61);
     }
-
-    /// 👺Broadcast is not implemented yet.
-    /// 👺型をちゃんとモデルナンバーとファームバージョンにした方がいいかも
-    /// 👺待ち方が不十分
-    pub fn ping(&mut self, id: u8) -> (u16, u8) {
-        let length: u16 = 1 + 2; // instruction + crc
-        let mut msg = Vec::<u8, MAX_PACKET_LEN>::new();
-        msg.extend(self.reserve_msg_header().iter().cloned());
-        msg.push(id).unwrap();
-        msg.extend(length.to_le_bytes().iter().cloned()); // Set length temporary
-        msg.push(Instruction::Ping as u8).unwrap();
-
-        self.send_packet(msg).unwrap();
-
-        let mut status = Vec::<u8, 128>::new();
-        let status_len = 14;
-        for _i in 0..status_len {
-            match self.uart.read_byte() {
-                None => {}
-                Some(data) => {
-                    status.push(data).unwrap();
-                }
-            }
-        }
-        if status.len() == status_len {
-            let model_number = u16::from_le_bytes([status[9], status[10]]);
-            let firmware_version = status[11];
-            (model_number, firmware_version)
-        } else {
-            (0, 0)
-        }
-    }
-
-    pub fn broadcast_ping(&mut self) {}
-    pub fn action(&mut self) {}
-    pub fn reboot(&mut self) {}
-    pub fn clear_multi_turn(&mut self) {}
-    pub fn factory_reset(&mut self) {}
 }
 
 #[cfg(test)]
@@ -126,6 +88,7 @@ mod tests {
             if self.tx_buf.len() == 0
                 && self.rx_buf.len() > 8
                 && self.rx_buf[Packet::Instruction.to_pos()] == Instruction::Ping.into()
+                && self.rx_buf[Packet::Id.to_pos()] == 0x01
             {
                 // ID1(XM430-W210) : For Model Number 1030(0x0406), Version of Firmware 38(0x26)
                 // Instruction Packet ID : 1
@@ -198,6 +161,49 @@ mod tests {
                     self.tx_buf.push_back(data).unwrap();
                 }
             }
+            // For test write(2byte)
+            if self.tx_buf.len() == 0
+                && self.rx_buf.len() > 13
+                && self.rx_buf[Packet::Instruction.to_pos()] == Instruction::Write.into()
+                && self.rx_buf[Packet::Id.to_pos()] == 0x01
+                && self.rx_buf[Packet::Parameter0.to_pos()] == 0x26
+            {
+                // ID1(XC330-T181) : Current Limit(38, 0x0026, 2[byte]) = 888(0x0378)
+                let res = [
+                    0xFF, 0xFF, 0xFD, 0x00, 0x01, 0x04, 0x00, 0x55, 0x00, 0xA1, 0x0C,
+                ];
+                for data in res {
+                    self.tx_buf.push_back(data).unwrap();
+                }
+            }
+            // For test write(1byte)
+            if self.tx_buf.len() == 0
+                && self.rx_buf.len() > 12
+                && self.rx_buf[Packet::Instruction.to_pos()] == Instruction::Write.into()
+                && self.rx_buf[Packet::Id.to_pos()] == 0x01
+                && self.rx_buf[Packet::Parameter0.to_pos()] == 0x1F
+            {
+                // ID1(XC330-T181) : Temperature Limit(31, 0x001F, 1[byte]) = 80(0x50)
+                let res = [
+                    0xFF, 0xFF, 0xFD, 0x00, 0x01, 0x04, 0x00, 0x55, 0x00, 0xA1, 0x0C,
+                ];
+                for data in res {
+                    self.tx_buf.push_back(data).unwrap();
+                }
+            }
+            // For test reboot
+            if self.tx_buf.len() == 0
+                && self.rx_buf.len() > 8
+                && self.rx_buf[Packet::Instruction.to_pos()] == Instruction::Reboot.into()
+                && self.rx_buf[Packet::Id.to_pos()] == 0x01
+            {
+                let res = [
+                    0xFF, 0xFF, 0xFD, 0x00, 0x01, 0x04, 0x00, 0x55, 0x00, 0xA1, 0x0C,
+                ];
+                for data in res {
+                    self.tx_buf.push_back(data).unwrap();
+                }
+            }
         }
         fn read_byte(&mut self) -> Option<u8> {
             self.tx_buf.pop_front()
@@ -253,13 +259,20 @@ mod tests {
         let mut mock_uart = MockSerial::new();
         let mock_clock = MockClock::new();
         let mut dxl = DynamixelControl::new(&mut mock_uart, &mock_clock);
-        let (model_number, firmware_version) = dxl.ping(1);
+
+        match dxl.ping(1) {
+            Ok(v) => {
+                let (model_number, firmware_version) = v;
+                assert_eq!(model_number, 0x0406);
+                assert_eq!(firmware_version, 0x26);
+            }
+            Err(_) => assert!(false),
+        }
+
         assert_eq!(
             *mock_uart.rx_buf,
             [0xFF, 0xFF, 0xFD, 0x00, 0x01, 0x03, 0x00, 0x01, 0x19, 0x4E]
         );
-        assert_eq!(model_number, 0x0406);
-        assert_eq!(firmware_version, 0x26);
     }
 
     #[test]
@@ -350,6 +363,47 @@ mod tests {
                 0xCA, 0x89
             ]
         );
+    }
+    #[test]
+    fn write_2byte() {
+        // ID1(XC330-T181) : Current Limit(38, 0x0026, 2[byte]) = 888(0x0378)
+        let mut mock_uart = MockSerial::new();
+        let mock_clock = MockClock::new();
+        let mut dxl = DynamixelControl::new(&mut mock_uart, &mock_clock);
+        let result = dxl.write_2byte(1, ControlTable::CurrentLimit, 888);
+        assert_eq!(result.is_ok(), true);
+        assert_eq!(
+            *mock_uart.rx_buf,
+            [0xFF, 0xFF, 0xFD, 0x00, 0x01, 0x07, 0x00, 0x03, 0x26, 0x00, 0x78, 0x03, 0x5A, 0x35]
+        );
+    }
+    #[test]
+    fn write_1byte() {
+        // ID1(XC330-T181) : Temperature Limit(31, 0x001F, 1[byte]) = 80(0x50)
+        let mut mock_uart = MockSerial::new();
+        let mock_clock = MockClock::new();
+        let mut dxl = DynamixelControl::new(&mut mock_uart, &mock_clock);
+        let result = dxl.write_1byte(1, ControlTable::TemperatureLimit, 80);
+        assert_eq!(result.is_ok(), true);
+        assert_eq!(
+            *mock_uart.rx_buf,
+            [0xFF, 0xFF, 0xFD, 0x00, 0x01, 0x06, 0x00, 0x03, 0x1F, 0x00, 0x50, 0xB2, 0xE3]
+        );
+    }
+
+    #[test]
+    fn reboot() {
+        let mut mock_uart = MockSerial::new();
+        let mock_clock = MockClock::new();
+        let mut dxl = DynamixelControl::new(&mut mock_uart, &mock_clock);
+
+        let result = dxl.reboot(1);
+
+        assert_eq!(
+            *mock_uart.rx_buf,
+            [0xFF, 0xFF, 0xFD, 0x00, 0x01, 0x03, 0x00, 0x08, 0x2F, 0x4E]
+        );
+        assert_eq!(result.is_ok(), true);
     }
 
     #[test]
