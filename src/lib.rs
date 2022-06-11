@@ -191,11 +191,11 @@ mod tests {
                     self.tx_buf.push_back(data).unwrap();
                 }
             }
-            // For test reboot
+            // For test reboot and factory reset
             if self.tx_buf.len() == 0
                 && self.rx_buf.len() > 8
-                && self.rx_buf[Packet::Instruction.to_pos()] == Instruction::Reboot.into()
                 && self.rx_buf[Packet::Id.to_pos()] == 0x01
+                && (self.rx_buf[Packet::Instruction.to_pos()] == Instruction::Reboot.into() || self.rx_buf[Packet::Instruction.to_pos()] == Instruction::FactoryReset.into() )
             {
                 let res = [
                     0xFF, 0xFF, 0xFD, 0x00, 0x01, 0x04, 0x00, 0x55, 0x00, 0xA1, 0x0C,
@@ -389,6 +389,21 @@ mod tests {
             *mock_uart.rx_buf,
             [0xFF, 0xFF, 0xFD, 0x00, 0x01, 0x06, 0x00, 0x03, 0x1F, 0x00, 0x50, 0xB2, 0xE3]
         );
+    }
+
+    #[test]
+    fn factory_reset() {
+        let mut mock_uart = MockSerial::new();
+        let mock_clock = MockClock::new();
+        let mut dxl = DynamixelControl::new(&mut mock_uart, &mock_clock);
+
+        let result = dxl.factory_reset(1);
+
+        assert_eq!( 
+            *mock_uart.rx_buf,
+            [0xFF, 0xFF, 0xFD, 0x00, 0x01, 0x04, 0x00, 0x06, 0x02, 0xAB, 0xE6]
+        );
+        assert_eq!(result.is_ok(), true);
     }
 
     #[test]

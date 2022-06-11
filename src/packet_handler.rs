@@ -258,8 +258,6 @@ impl<'a> DynamixelControl<'a> {
     }
 
     /// 👺Broadcast is not implemented yet.
-    /// 👺型をちゃんとモデルナンバーとファームバージョンにした方がいいかも
-    /// 👺待ち方が不十分
     pub fn ping(&mut self, id: u8) -> Result<(u16, u8), CommunicationResult> {
         let length: u16 = 1 + 2; // instruction + crc
         let mut msg = Vec::<u8, MAX_PACKET_LEN>::new();
@@ -596,7 +594,56 @@ impl<'a> DynamixelControl<'a> {
     pub fn broadcast_ping(&mut self) {}
     pub fn action(&mut self) {}
     pub fn clear_multi_turn(&mut self) {}
-    pub fn factory_reset(&mut self) {}
+
+    /// Reset all except ID and Baudrate.
+    /// Other reset type is not implemented yet.
+    pub fn factory_reset(&mut self, id: u8)  -> Result<(), CommunicationResult>{
+        let length: u16 = 1 + 1 + 2; // instruction + param1 + crc
+        let mut msg = Vec::<u8, MAX_PACKET_LEN>::new();
+
+        msg.extend(self.reserve_msg_header().iter().cloned());
+        msg.push(id).unwrap();
+        msg.extend(length.to_le_bytes().iter().cloned()); // Set length temporary
+        msg.push(Instruction::FactoryReset as u8).unwrap();
+        msg.push(0x02).unwrap();    // Reset all except ID and Baudrate
+        let packet_len = msg.len() + 2;
+        match self.send_packet(msg) {
+            Ok(_) => {
+                self.set_packet_timeout_length(packet_len);
+            }
+            Err(e) => return Err(e),
+        }
+
+        let status;
+        match self.receive_packet() {
+            Ok(v) => status = v,
+            Err(e) => return Err(e),
+        }
+
+        // header + id + length + instruction + err + param + crc
+        // id check
+        if status[Packet::Id.to_pos()] != id {
+            return Err(CommunicationResult::SomethingWentWrong);
+        }
+        // data length check
+        if u16::from_le_bytes([
+            status[Packet::LengthL.to_pos()],
+            status[Packet::LengthH.to_pos()],
+        ]) - 4
+            != 0
+        {
+            return Err(CommunicationResult::SomethingWentWrong);
+        }
+        // instruction check
+        if status[Packet::Instruction.to_pos()] != Instruction::Status as u8 {
+            return Err(CommunicationResult::SomethingWentWrong);
+        }
+        if status[Packet::Error.to_pos()] != 0x00 {
+            return Err(CommunicationResult::SomethingWentWrong);
+        }
+
+        Ok(())
+    }
 
     pub fn reboot(&mut self, id: u8) -> Result<(), CommunicationResult> {
         let length: u16 = 1 + 2; // instruction + crc
@@ -786,7 +833,7 @@ mod tests {
         let mut msg = Vec::<u8, MAX_PACKET_LEN>::new();
         msg.extend(
             [
-                0xFF, 0xFF, 0xFD, 0x00, 0x01, 0x06, 0x00, 0x03, 0x1F, 0x00, 0x50,
+                0xFF, 0xFF, 0xFD, 0x00, 0x01, 0x04, 0x00, 0x06, 0x02,
             ]
             .iter()
             .cloned(),
