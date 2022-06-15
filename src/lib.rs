@@ -195,7 +195,9 @@ mod tests {
             if self.tx_buf.len() == 0
                 && self.rx_buf.len() > 8
                 && self.rx_buf[Packet::Id.to_pos()] == 0x01
-                && (self.rx_buf[Packet::Instruction.to_pos()] == Instruction::Reboot.into() || self.rx_buf[Packet::Instruction.to_pos()] == Instruction::FactoryReset.into() )
+                && (self.rx_buf[Packet::Instruction.to_pos()] == Instruction::Reboot.into()
+                    || self.rx_buf[Packet::Instruction.to_pos()]
+                        == Instruction::FactoryReset.into())
             {
                 let res = [
                     0xFF, 0xFF, 0xFD, 0x00, 0x01, 0x04, 0x00, 0x55, 0x00, 0xA1, 0x0C,
@@ -399,7 +401,7 @@ mod tests {
 
         let result = dxl.factory_reset(1);
 
-        assert_eq!( 
+        assert_eq!(
             *mock_uart.rx_buf,
             [0xFF, 0xFF, 0xFD, 0x00, 0x01, 0x04, 0x00, 0x06, 0x02, 0xAB, 0xE6]
         );
@@ -417,6 +419,24 @@ mod tests {
         assert_eq!(
             *mock_uart.rx_buf,
             [0xFF, 0xFF, 0xFD, 0x00, 0x01, 0x03, 0x00, 0x08, 0x2F, 0x4E]
+        );
+        assert_eq!(result.is_ok(), true);
+    }
+
+    #[test]
+    fn sync_read_tx() {
+        // ID1(XM430-W210) : Present Position(132, 0x0084, 4[byte]) = 166(0x000000A6)
+        let mut mock_uart = MockSerial::new();
+        let mock_clock = MockClock::new();
+        let mut dxl = DynamixelControl::new(&mut mock_uart, &mock_clock);
+        let result = dxl.read(
+            1,
+            ControlTable::PresentPosition,
+            ControlTable::PresentPosition.to_size(),
+        );
+        assert_eq!(
+            *mock_uart.rx_buf,
+            [0xFF, 0xFF, 0xFD, 0x00, 0x01, 0x07, 0x00, 0x02, 0x84, 0x00, 0x04, 0x00, 0x1D, 0x15]
         );
         assert_eq!(result.is_ok(), true);
     }

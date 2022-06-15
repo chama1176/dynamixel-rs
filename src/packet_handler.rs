@@ -585,19 +585,9 @@ impl<'a> DynamixelControl<'a> {
         self.write(id, data_name, &data.to_le_bytes())
     }
 
-    // regWriteTxOnly
-    // regWriteTxRx
-    // syncReadTx
-    // syncWriteTxOnly
-    // bulkReadTx
-    // bulkWriteTxOnly
-    pub fn broadcast_ping(&mut self) {}
-    pub fn action(&mut self) {}
-    pub fn clear_multi_turn(&mut self) {}
-
     /// Reset all except ID and Baudrate.
     /// Other reset type is not implemented yet.
-    pub fn factory_reset(&mut self, id: u8)  -> Result<(), CommunicationResult>{
+    pub fn factory_reset(&mut self, id: u8) -> Result<(), CommunicationResult> {
         let length: u16 = 1 + 1 + 2; // instruction + param1 + crc
         let mut msg = Vec::<u8, MAX_PACKET_LEN>::new();
 
@@ -605,7 +595,7 @@ impl<'a> DynamixelControl<'a> {
         msg.push(id).unwrap();
         msg.extend(length.to_le_bytes().iter().cloned()); // Set length temporary
         msg.push(Instruction::FactoryReset as u8).unwrap();
-        msg.push(0x02).unwrap();    // Reset all except ID and Baudrate
+        msg.push(0x02).unwrap(); // Reset all except ID and Baudrate
         let packet_len = msg.len() + 2;
         match self.send_packet(msg) {
             Ok(_) => {
@@ -691,6 +681,42 @@ impl<'a> DynamixelControl<'a> {
 
         Ok(())
     }
+
+    pub fn send_sync_readpacket(&mut self, id: &[u8], data_name: ControlTable, data_size: u16) -> Result<(), CommunicationResult> {
+
+        let address = data_name.to_address();
+        let length: u16 = 1 + 2 + 2 + id.len() as u16 + 2; // instruction + address + length + id + crc
+        let mut msg = Vec::<u8, MAX_PACKET_LEN>::new();
+
+        msg.extend(self.reserve_msg_header().iter().cloned());
+        msg.push(0xFE).unwrap();    // id
+        msg.extend(length.to_le_bytes().iter().cloned()); // Set length temporary
+        msg.push(Instruction::SyncRead as u8).unwrap();        
+        msg.extend(address.to_le_bytes().iter().cloned());
+        msg.extend(data_size.to_le_bytes().iter().cloned());
+        for i in id {
+            msg.push(i.clone()).unwrap();
+        }
+
+        let packet_len = msg.len() + 2;
+
+        match self.send_packet(msg) {
+            Ok(_) => {
+                self.set_packet_timeout_length(packet_len);
+            }
+            Err(e) => return Err(e),
+        }
+
+        Ok(())
+    }
+    // syncWriteTxOnly
+    // bulkReadTx
+    // bulkWriteTxOnly
+    // pub fn broadcast_ping(&mut self) {}
+    // regWriteTxOnly
+    // regWriteTxRx
+    // pub fn action(&mut self) {}
+    // clear
 
     fn calc_crc_value(&self, msg: &[u8]) -> u16 {
         let crc_table = [
@@ -832,11 +858,9 @@ mod tests {
         let dxl = DynamixelControl::new(&mut mock_uart, &mock_clock);
         let mut msg = Vec::<u8, MAX_PACKET_LEN>::new();
         msg.extend(
-            [
-                0xFF, 0xFF, 0xFD, 0x00, 0x01, 0x04, 0x00, 0x06, 0x02,
-            ]
-            .iter()
-            .cloned(),
+            [0xFF, 0xFF, 0xFD, 0x00, 0x01, 0x04, 0x00, 0x06, 0x02]
+                .iter()
+                .cloned(),
         );
         assert_eq!(dxl.calc_crc_value(&msg), 0x0000);
     }
