@@ -2,10 +2,10 @@
 //! This crate is for control dynamixel.
 //!
 #![allow(unused_imports)]
-mod control_table;
+pub mod control_table;
 mod instruction;
-mod packet_handler;
-use control_table::ControlTable;
+pub mod packet_handler;
+pub use control_table::ControlTable;
 use core::result::Result;
 use core::time::Duration;
 use heapless::Vec;
