@@ -429,14 +429,14 @@ mod tests {
         let mut mock_uart = MockSerial::new();
         let mock_clock = MockClock::new();
         let mut dxl = DynamixelControl::new(&mut mock_uart, &mock_clock);
-        let result = dxl.read(
-            1,
+        let result = dxl.send_sync_read_packet(
+            &[1, 2],
             ControlTable::PresentPosition,
             ControlTable::PresentPosition.to_size(),
         );
         assert_eq!(
             *mock_uart.rx_buf,
-            [0xFF, 0xFF, 0xFD, 0x00, 0x01, 0x07, 0x00, 0x02, 0x84, 0x00, 0x04, 0x00, 0x1D, 0x15]
+            [0xFF, 0xFF, 0xFD, 0x00, 0xFE, 0x09, 0x00, 0x82, 0x84, 0x00, 0x04, 0x00, 0x01, 0x02, 0xCE, 0xFA]
         );
         assert_eq!(result.is_ok(), true);
     }

@@ -682,7 +682,7 @@ impl<'a> DynamixelControl<'a> {
         Ok(())
     }
 
-    pub fn send_sync_readpacket(&mut self, id: &[u8], data_name: ControlTable, data_size: u16) -> Result<(), CommunicationResult> {
+    pub fn send_sync_read_packet(&mut self, id: &[u8], data_name: ControlTable, data_size: u16) -> Result<(), CommunicationResult> {
 
         let address = data_name.to_address();
         let length: u16 = 1 + 2 + 2 + id.len() as u16 + 2; // instruction + address + length + id + crc
