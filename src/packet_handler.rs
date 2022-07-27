@@ -74,6 +74,7 @@ pub enum CommunicationResult {
     RxWaiting,
     RxTimeout,
     RxCorrupt,
+    RxCRCError,
     NotAvailable,
     SomethingWentWrong,
 }
@@ -95,6 +96,7 @@ impl fmt::Display for CommunicationResult {
             }
             CommunicationResult::RxTimeout => write!(f, "[TxRxResult] There is no status packet!"),
             CommunicationResult::RxCorrupt => write!(f, "[TxRxResult] Incorrect status packet!"),
+            CommunicationResult::RxCRCError => write!(f, "[TxRxResult] Incorrect Rx CRC!"),
             CommunicationResult::NotAvailable => {
                 write!(f, "[TxRxResult] Protocol does not support This function!")
             }
@@ -221,7 +223,7 @@ impl<'a> DynamixelControl<'a> {
                     if self.calc_crc_value(&msg[..msg.len() - 2]) == crc {
                         result = CommunicationResult::Success;
                     } else {
-                        result = CommunicationResult::RxCorrupt;
+                        result = CommunicationResult::RxCRCError;
                     }
                     break;
                 } else {
