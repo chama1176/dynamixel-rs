@@ -401,16 +401,8 @@ mod tests {
         let mock_clock = MockClock::new();
         let mut dxl = DynamixelControl::new(&mut mock_uart, &mock_clock);
         dxl.send_1byte_write_packet(1, ControlTable::TemperatureLimit, 80).unwrap();
+        
         let result = dxl.read_4byte(1, ControlTable::PresentPosition);
-        assert_eq!(
-            dxl.uart.read_byte(),
-            None
-        );
-        // assert_eq!(
-        //     *mock_uart.rx_buf,
-        //     [0xFF, 0xFF, 0xFD, 0x00, 0x01, 0x07, 0x00, 0x02, 0x84, 0x00, 0x04, 0x00, 0x1D, 0x15]
-        // );
-        assert_eq!(result, Err(CommunicationResult::Success));
         assert_eq!(result.is_ok(), true);
         assert_eq!(result, Ok(0x000000A6));
     }
