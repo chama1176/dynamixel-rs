@@ -310,7 +310,7 @@ mod tests {
         assert_eq!(result.is_ok(), true);
         assert_eq!(result, Ok(0x000000A6));
     }
-
+    
     #[test]
     fn read_2byte() {
         // ID1(XC330-T181) : Current Limit(38, 0x0026, 2[byte]) = 888(0x0378)
@@ -392,6 +392,29 @@ mod tests {
             [0xFF, 0xFF, 0xFD, 0x00, 0x01, 0x06, 0x00, 0x03, 0x1F, 0x00, 0x50, 0xB2, 0xE3]
         );
     }
+
+    #[test]
+    #[ignore]
+    fn read_after_write() {
+        // ID1(XM430-W210) : Present Position(132, 0x0084, 4[byte]) = 166(0x000000A6)
+        let mut mock_uart = MockSerial::new();
+        let mock_clock = MockClock::new();
+        let mut dxl = DynamixelControl::new(&mut mock_uart, &mock_clock);
+        dxl.send_1byte_write_packet(1, ControlTable::TemperatureLimit, 80).unwrap();
+        let result = dxl.read_4byte(1, ControlTable::PresentPosition);
+        assert_eq!(
+            dxl.uart.read_byte(),
+            None
+        );
+        // assert_eq!(
+        //     *mock_uart.rx_buf,
+        //     [0xFF, 0xFF, 0xFD, 0x00, 0x01, 0x07, 0x00, 0x02, 0x84, 0x00, 0x04, 0x00, 0x1D, 0x15]
+        // );
+        assert_eq!(result, Err(CommunicationResult::Success));
+        assert_eq!(result.is_ok(), true);
+        assert_eq!(result, Ok(0x000000A6));
+    }
+
 
     #[test]
     fn factory_reset() {

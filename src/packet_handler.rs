@@ -130,6 +130,7 @@ impl<'a> DynamixelControl<'a> {
         // add crc
         msg.extend(self.calc_crc_value(&msg).to_le_bytes().iter().cloned());
 
+        self.clear_port();
         for m in msg {
             self.uart.write_byte(m);
         }
@@ -782,6 +783,17 @@ impl<'a> DynamixelControl<'a> {
             false
         }
     }
+
+    fn clear_port(&mut self) {
+        loop {
+            match self.uart.read_byte() {
+                None => {
+                    break;
+                }
+                Some(_) => {}
+            }    
+        }
+    }
 }
 
 #[cfg(test)]
@@ -893,4 +905,19 @@ mod tests {
         assert_eq!(cell, RefCell::new(6));
         assert_eq!(cell.clone().into_inner(), 6);
     }
+
+
+    #[test]
+    fn clear_port() {
+        let mut mock_uart = MockSerial::new();
+        mock_uart.tx_buf.push_back(1).unwrap();
+        mock_uart.tx_buf.push_back(2).unwrap();
+        mock_uart.tx_buf.push_back(3).unwrap();
+        let mock_clock = MockClock::new();
+        let mut dxl = DynamixelControl::new(&mut mock_uart, &mock_clock);
+        dxl.clear_port();
+        assert_eq!(mock_uart.tx_buf.is_empty(), true);
+    }
+
+
 }
