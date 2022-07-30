@@ -3,14 +3,16 @@
 //!
 #![allow(unused_imports)]
 pub mod control_table;
-mod instruction;
 pub mod packet_handler;
+mod instruction;
 pub use control_table::ControlTable;
+pub use packet_handler::CommunicationResult;
+use packet_handler::MAX_PACKET_LEN;
+
 use core::result::Result;
 use core::time::Duration;
 use heapless::Vec;
 use instruction::Instruction;
-use packet_handler::MAX_PACKET_LEN;
 
 pub trait Interface {
     fn write_byte(&mut self, data: u8);
