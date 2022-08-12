@@ -4,6 +4,7 @@
 #![allow(unused_imports)]
 pub mod control_table;
 pub mod packet_handler;
+pub mod utils;
 mod instruction;
 pub use control_table::ControlTable;
 pub use packet_handler::CommunicationResult;

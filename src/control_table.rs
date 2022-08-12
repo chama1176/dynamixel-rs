@@ -397,6 +397,8 @@ impl ControlTable {
     }
 }
 
+// ここにpulse to rad とかをまとめたい
+
 #[cfg(test)]
 mod tests {
     use crate::control_table::ControlTable;
