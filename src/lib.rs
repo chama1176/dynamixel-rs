@@ -9,6 +9,7 @@ mod instruction;
 pub use control_table::ControlTable;
 pub use packet_handler::CommunicationResult;
 use packet_handler::MAX_PACKET_LEN;
+pub use utils::DegRad;
 
 use core::result::Result;
 use core::time::Duration;

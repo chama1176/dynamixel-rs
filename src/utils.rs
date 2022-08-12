@@ -1,4 +1,4 @@
-trait DegRad<T> {
+pub trait DegRad<T> {
     fn deg2rad(self) -> T;
     fn rad2deg(self) -> T;
 }
