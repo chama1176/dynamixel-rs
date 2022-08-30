@@ -3,10 +3,12 @@
 //!
 #![allow(unused_imports)]
 pub mod control_table;
+pub mod control_data;
 pub mod packet_handler;
 pub mod utils;
 mod instruction;
 pub use control_table::ControlTable;
+pub use control_data::ControlData;
 pub use packet_handler::CommunicationResult;
 use packet_handler::MAX_PACKET_LEN;
 pub use utils::DegRad;
@@ -31,11 +33,12 @@ pub struct DynamixelControl<'a> {
     is_using: bool,
     packet_start_time: Duration,
     packet_timeout: Duration,
+    baudrate: u32,
     tx_time_per_byte: u64,
 }
 
 impl<'a> DynamixelControl<'a> {
-    pub fn new(uart: &'a mut dyn Interface, clock: &'a dyn Clock) -> Self {
+    pub fn new(uart: &'a mut dyn Interface, clock: &'a dyn Clock, baudrate: u32) -> Self {
         Self {
             uart,
             clock,
@@ -43,13 +46,22 @@ impl<'a> DynamixelControl<'a> {
             is_using: false,
             packet_start_time: Duration::new(0, 0),
             packet_timeout: Duration::new(0, 0),
-            tx_time_per_byte: ((1_000_000.0 * 8.0 + (115200.0 - 1.0)) / 115200.0) as u64,
+            baudrate: baudrate,
+            tx_time_per_byte: ((1_000_000.0 * 8.0 + (baudrate as f32 - 1.0)) / baudrate as f32) as u64,
         }
+    }
+
+    fn set_operating_mode(&mut self, id: u8, data: u8) -> Result<(), CommunicationResult> {
+        self.write_1byte(id, ControlTable::OperatingMode, data)
     }
 
     pub fn set_led(&mut self, id: u8, data: u8) {
         self.send_write_packet(id, ControlTable::LED, &[data])
             .unwrap();
+    }
+
+    fn set_torque_enable(&mut self, id: u8, data: u8) -> Result<(), CommunicationResult> {
+        self.write_1byte(id, ControlTable::TorqueEnable, 1)
     }
 
     pub fn torque_enable(&mut self) {
@@ -236,11 +248,13 @@ mod tests {
             self.time_elasped.clone().into_inner()
         }
     }
+
     #[test]
+    #[ignore]
     fn torque_enable_xc330() {
         let mut mock_uart = MockSerial::new();
         let mock_clock = MockClock::new();
-        let mut dxl = DynamixelControl::new(&mut mock_uart, &mock_clock);
+        let mut dxl = DynamixelControl::new(&mut mock_uart, &mock_clock, 115200);
         dxl.torque_enable();
         assert_eq!(*mock_uart.rx_buf, [0xFF, 0x6f, 0x6c, 0x61]);
     }
@@ -249,7 +263,7 @@ mod tests {
     fn set_led_xc330() {
         let mut mock_uart = MockSerial::new();
         let mock_clock = MockClock::new();
-        let mut dxl = DynamixelControl::new(&mut mock_uart, &mock_clock);
+        let mut dxl = DynamixelControl::new(&mut mock_uart, &mock_clock, 115200);
         dxl.set_led(1, 1);
         // crc以外をテスト
         assert_eq!(
@@ -264,7 +278,7 @@ mod tests {
         // Instruction Packet ID : 1
         let mut mock_uart = MockSerial::new();
         let mock_clock = MockClock::new();
-        let mut dxl = DynamixelControl::new(&mut mock_uart, &mock_clock);
+        let mut dxl = DynamixelControl::new(&mut mock_uart, &mock_clock, 115200);
 
         match dxl.ping(1) {
             Ok(v) => {
@@ -286,7 +300,7 @@ mod tests {
         // ID1(XM430-W210) : Present Position(132, 0x0084, 4[byte]) = 166(0x000000A6)
         let mut mock_uart = MockSerial::new();
         let mock_clock = MockClock::new();
-        let mut dxl = DynamixelControl::new(&mut mock_uart, &mock_clock);
+        let mut dxl = DynamixelControl::new(&mut mock_uart, &mock_clock, 115200);
         let result = dxl.read(
             1,
             ControlTable::PresentPosition,
@@ -305,7 +319,7 @@ mod tests {
         // ID1(XM430-W210) : Present Position(132, 0x0084, 4[byte]) = 166(0x000000A6)
         let mut mock_uart = MockSerial::new();
         let mock_clock = MockClock::new();
-        let mut dxl = DynamixelControl::new(&mut mock_uart, &mock_clock);
+        let mut dxl = DynamixelControl::new(&mut mock_uart, &mock_clock, 115200);
         let result = dxl.read_4byte(1, ControlTable::PresentPosition);
         assert_eq!(
             *mock_uart.rx_buf,
@@ -320,7 +334,7 @@ mod tests {
         // ID1(XC330-T181) : Current Limit(38, 0x0026, 2[byte]) = 888(0x0378)
         let mut mock_uart = MockSerial::new();
         let mock_clock = MockClock::new();
-        let mut dxl = DynamixelControl::new(&mut mock_uart, &mock_clock);
+        let mut dxl = DynamixelControl::new(&mut mock_uart, &mock_clock, 115200);
         let result = dxl.read_2byte(1, ControlTable::CurrentLimit);
         assert_eq!(result.is_ok(), true);
         assert_eq!(result, Ok(0x0378));
@@ -331,7 +345,7 @@ mod tests {
         // ID1(XC330-T181) : Operating Mode(11, 0x000B, 1[byte]) = 5(0x05)
         let mut mock_uart = MockSerial::new();
         let mock_clock = MockClock::new();
-        let mut dxl = DynamixelControl::new(&mut mock_uart, &mock_clock);
+        let mut dxl = DynamixelControl::new(&mut mock_uart, &mock_clock, 115200);
         let result = dxl.read_1byte(1, ControlTable::OperatingMode);
         assert_eq!(result.is_ok(), true);
         assert_eq!(result, Ok(0x05));
@@ -342,7 +356,7 @@ mod tests {
         // ID1(XM430-W210) : Write 512(0x00000200) to Goal Position(116, 0x0074, 4[byte])
         let mut mock_uart = MockSerial::new();
         let mock_clock = MockClock::new();
-        let mut dxl = DynamixelControl::new(&mut mock_uart, &mock_clock);
+        let mut dxl = DynamixelControl::new(&mut mock_uart, &mock_clock, 115200);
         let data: u32 = 0x00000200;
         let result = dxl.write(1, ControlTable::GoalPosition, &data.to_le_bytes());
         assert_eq!(
@@ -359,7 +373,7 @@ mod tests {
         // ID1(XM430-W210) : Write 512(0x00000200) to Goal Position(116, 0x0074, 4[byte])
         let mut mock_uart = MockSerial::new();
         let mock_clock = MockClock::new();
-        let mut dxl = DynamixelControl::new(&mut mock_uart, &mock_clock);
+        let mut dxl = DynamixelControl::new(&mut mock_uart, &mock_clock, 115200);
         let result = dxl.write_4byte(1, ControlTable::GoalPosition, 0x00000200);
         assert_eq!(result.is_ok(), true);
         assert_eq!(
@@ -375,7 +389,7 @@ mod tests {
         // ID1(XC330-T181) : Current Limit(38, 0x0026, 2[byte]) = 888(0x0378)
         let mut mock_uart = MockSerial::new();
         let mock_clock = MockClock::new();
-        let mut dxl = DynamixelControl::new(&mut mock_uart, &mock_clock);
+        let mut dxl = DynamixelControl::new(&mut mock_uart, &mock_clock, 115200);
         let result = dxl.write_2byte(1, ControlTable::CurrentLimit, 888);
         assert_eq!(result.is_ok(), true);
         assert_eq!(
@@ -388,7 +402,7 @@ mod tests {
         // ID1(XC330-T181) : Temperature Limit(31, 0x001F, 1[byte]) = 80(0x50)
         let mut mock_uart = MockSerial::new();
         let mock_clock = MockClock::new();
-        let mut dxl = DynamixelControl::new(&mut mock_uart, &mock_clock);
+        let mut dxl = DynamixelControl::new(&mut mock_uart, &mock_clock, 115200);
         let result = dxl.write_1byte(1, ControlTable::TemperatureLimit, 80);
         assert_eq!(result.is_ok(), true);
         assert_eq!(
@@ -403,7 +417,7 @@ mod tests {
         // ID1(XM430-W210) : Present Position(132, 0x0084, 4[byte]) = 166(0x000000A6)
         let mut mock_uart = MockSerial::new();
         let mock_clock = MockClock::new();
-        let mut dxl = DynamixelControl::new(&mut mock_uart, &mock_clock);
+        let mut dxl = DynamixelControl::new(&mut mock_uart, &mock_clock, 115200);
         dxl.send_1byte_write_packet(1, ControlTable::TemperatureLimit, 80).unwrap();
         
         let result = dxl.read_4byte(1, ControlTable::PresentPosition);
@@ -416,7 +430,7 @@ mod tests {
     fn factory_reset() {
         let mut mock_uart = MockSerial::new();
         let mock_clock = MockClock::new();
-        let mut dxl = DynamixelControl::new(&mut mock_uart, &mock_clock);
+        let mut dxl = DynamixelControl::new(&mut mock_uart, &mock_clock, 115200);
 
         let result = dxl.factory_reset(1);
 
@@ -431,7 +445,7 @@ mod tests {
     fn reboot() {
         let mut mock_uart = MockSerial::new();
         let mock_clock = MockClock::new();
-        let mut dxl = DynamixelControl::new(&mut mock_uart, &mock_clock);
+        let mut dxl = DynamixelControl::new(&mut mock_uart, &mock_clock, 115200);
 
         let result = dxl.reboot(1);
 
@@ -447,7 +461,7 @@ mod tests {
         // ID1(XM430-W210) : Present Position(132, 0x0084, 4[byte]) = 166(0x000000A6)
         let mut mock_uart = MockSerial::new();
         let mock_clock = MockClock::new();
-        let mut dxl = DynamixelControl::new(&mut mock_uart, &mock_clock);
+        let mut dxl = DynamixelControl::new(&mut mock_uart, &mock_clock, 115200);
         let result = dxl.send_sync_read_packet(
             &[1, 2],
             ControlTable::PresentPosition,

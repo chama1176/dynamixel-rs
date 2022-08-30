@@ -852,7 +852,7 @@ mod tests {
     fn crc() {
         let mut mock_uart = MockSerial::new();
         let mock_clock = MockClock::new();
-        let dxl = DynamixelControl::new(&mut mock_uart, &mock_clock);
+        let dxl = DynamixelControl::new(&mut mock_uart, &mock_clock, 115200);
         let mut msg = Vec::<u8, MAX_PACKET_LEN>::new();
         msg.extend(
             [
@@ -869,7 +869,7 @@ mod tests {
     fn calc_crc() {
         let mut mock_uart = MockSerial::new();
         let mock_clock = MockClock::new();
-        let dxl = DynamixelControl::new(&mut mock_uart, &mock_clock);
+        let dxl = DynamixelControl::new(&mut mock_uart, &mock_clock, 115200);
         let mut msg = Vec::<u8, MAX_PACKET_LEN>::new();
         msg.extend(
             [0xFF, 0xFF, 0xFD, 0x00, 0x01, 0x04, 0x00, 0x06, 0x02]
@@ -884,7 +884,7 @@ mod tests {
         let mut mock_uart = MockSerial::new();
         let mock_clock = MockClock::new();
 
-        let mut dxl = DynamixelControl::new(&mut mock_uart, &mock_clock);
+        let mut dxl = DynamixelControl::new(&mut mock_uart, &mock_clock, 115200);
         dxl.set_packet_timeout_length(10);
         assert_eq!(dxl.packet_timeout.as_micros(), 4700);
         assert_eq!(dxl.is_packet_timeout(), false);
@@ -914,7 +914,7 @@ mod tests {
         mock_uart.tx_buf.push_back(2).unwrap();
         mock_uart.tx_buf.push_back(3).unwrap();
         let mock_clock = MockClock::new();
-        let mut dxl = DynamixelControl::new(&mut mock_uart, &mock_clock);
+        let mut dxl = DynamixelControl::new(&mut mock_uart, &mock_clock, 115200);
         dxl.clear_port();
         assert_eq!(mock_uart.tx_buf.is_empty(), true);
     }
