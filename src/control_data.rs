@@ -12,21 +12,16 @@ pub enum OperatingMode {
 
 #[allow(dead_code)]
 impl OperatingMode {
-    pub fn to_value(&self) -> u16 {
+    pub fn to_value(&self) -> u8 {
         match self {
             OperatingMode::CurrentControlMode => 0,
-            OperatingMode::VelocityControlMode => 0,
-            OperatingMode::VelocityControlMode => 0,
-            OperatingMode::VelocityControlMode => 0,
-            OperatingMode::VelocityControlMode => 0,
-            OperatingMode::VelocityControlMode => 0,
+            OperatingMode::VelocityControlMode => 1,
+            OperatingMode::PositionControlMode => 3,
+            OperatingMode::ExtendedPosionControlMode => 4,
+            OperatingMode::CurrentBasedPositionControlMode => 5,
+            OperatingMode::PWMControMode => 16,
         }
     }
 }
 
-
-pub enum ControlData {
-    OperatingMode,
-
-}
 

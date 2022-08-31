@@ -8,7 +8,7 @@ pub mod packet_handler;
 pub mod utils;
 mod instruction;
 pub use control_table::ControlTable;
-pub use control_data::ControlData;
+pub use control_data::*;
 pub use packet_handler::CommunicationResult;
 use packet_handler::MAX_PACKET_LEN;
 pub use utils::DegRad;
@@ -51,8 +51,8 @@ impl<'a> DynamixelControl<'a> {
         }
     }
 
-    fn set_operating_mode(&mut self, id: u8, data: u8) -> Result<(), CommunicationResult> {
-        self.write_1byte(id, ControlTable::OperatingMode, data)
+    fn set_operating_mode(&mut self, id: u8, data: OperatingMode) -> Result<(), CommunicationResult> {
+        self.write_1byte(id, ControlTable::OperatingMode, data.to_value())
     }
 
     pub fn set_led(&mut self, id: u8, data: u8) {
@@ -79,6 +79,7 @@ mod tests {
     use crate::ControlTable;
     use crate::DynamixelControl;
     use crate::Instruction;
+    use crate::control_data::*;
     use core::cell::RefCell;
     use core::time::Duration;
     use heapless::Deque;
@@ -478,4 +479,14 @@ mod tests {
     fn u16_to_u8() {
         assert_eq!((0xFBFA as u16).to_le_bytes(), [0xFA, 0xFB]);
     }
+
+    #[test]
+    #[ignore]
+    fn change_operating_mode() {
+        let mut mock_uart = MockSerial::new();
+        let mock_clock = MockClock::new();
+        let mut dxl = DynamixelControl::new(&mut mock_uart, &mock_clock, 115200);
+        dxl.set_operating_mode(1,  OperatingMode::CurrentBasedPositionControlMode).unwrap();
+    }
+
 }
