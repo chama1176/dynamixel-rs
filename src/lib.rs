@@ -481,12 +481,13 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
+    // #[ignore]
     fn change_operating_mode() {
-        let mut mock_uart = MockSerial::new();
-        let mock_clock = MockClock::new();
-        let mut dxl = DynamixelControl::new(&mut mock_uart, &mock_clock, 115200);
-        dxl.set_operating_mode(1,  OperatingMode::CurrentBasedPositionControlMode).unwrap();
+        // let mut mock_uart = MockSerial::new();
+        // let mock_clock = MockClock::new();
+        // let mut dxl = DynamixelControl::new(&mut mock_uart, &mock_clock, 115200);
+        // dxl.set_operating_mode(1,  OperatingMode::CurrentBasedPositionControlMode).unwrap();
+        let x = 10.0 - dxl_consts::f32::HOME_POSITION;
     }
 
 }
