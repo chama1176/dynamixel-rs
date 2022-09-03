@@ -64,13 +64,24 @@ impl<'a> DynamixelControl<'a> {
         self.write_1byte(id, ControlTable::TorqueEnable, data)
     }
 
-    pub fn get_position(&mut self, id: u8, data: u8) -> Result<f32, CommunicationResult> {
-        
-    
+    pub fn get_present_position(&mut self, id: u8) -> Result<f32, CommunicationResult> {
+        let result = self.read_4byte(id, ControlTable::PresentPosition);
+        match result {
+            Ok(v) => {
+                Ok((v as f32 * ControlTable::PresentPosition.to_unit() - dxl_consts::f32::HOME_POSITION).pulse2deg().deg2rad())
+            },
+            Err(e) => Err(e),
+        } 
     }
 
-    pub fn set_current(&mut self, id: u8, data: u8) -> Result<f32, CommunicationResult> {
-    
+    /// current: A
+    pub fn set_goal_current(&mut self, id: u8, current: f32) -> Result<(), CommunicationResult> {
+        let data: u16 = u16::from_le_bytes(((current /  ControlTable::GoalCurrent.to_unit() * 1000.0) as i16).to_le_bytes());
+        let result = self.write_2byte(id, ControlTable::GoalCurrent, data);
+        match result {
+            Ok(_) => Ok(()),
+            Err(e) => Err(e),
+        }
     }
 
     // pub fn torque_enable(&mut self) {

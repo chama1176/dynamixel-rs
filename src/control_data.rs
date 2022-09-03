@@ -40,11 +40,20 @@ pub mod dxl_consts {
     }
 }
 
+impl Pulse2Deg<f32> for f32 {
+    fn pulse2deg(self) -> f32 {
+        self * 0.088
+    }
+    fn deg2pulse(self) -> f32 {
+        self / 0.088
+    }
+}
+
 impl Pulse2Deg<f64> for f64 {
     fn pulse2deg(self) -> f64 {
         self * 0.088
     }
     fn deg2pulse(self) -> f64 {
-        self * 0.088
+        self / 0.088
     }
 }
