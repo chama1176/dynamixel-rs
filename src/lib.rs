@@ -51,7 +51,7 @@ impl<'a> DynamixelControl<'a> {
         }
     }
 
-    fn set_operating_mode(&mut self, id: u8, data: OperatingMode) -> Result<(), CommunicationResult> {
+    pub fn set_operating_mode(&mut self, id: u8, data: OperatingMode) -> Result<(), CommunicationResult> {
         self.write_1byte(id, ControlTable::OperatingMode, data.to_value())
     }
 
@@ -60,16 +60,25 @@ impl<'a> DynamixelControl<'a> {
             .unwrap();
     }
 
-    fn set_torque_enable(&mut self, id: u8, data: u8) -> Result<(), CommunicationResult> {
-        self.write_1byte(id, ControlTable::TorqueEnable, 1)
+    pub fn set_torque_enable(&mut self, id: u8, data: u8) -> Result<(), CommunicationResult> {
+        self.write_1byte(id, ControlTable::TorqueEnable, data)
     }
 
-    pub fn torque_enable(&mut self) {
-        self.uart.write_byte(0xFF);
-        self.uart.write_byte(0x6f);
-        self.uart.write_byte(0x6c);
-        self.uart.write_byte(0x61);
+    pub fn get_position(&mut self, id: u8, data: u8) -> Result<f32, CommunicationResult> {
+        
+    
     }
+
+    pub fn set_current(&mut self, id: u8, data: u8) -> Result<f32, CommunicationResult> {
+    
+    }
+
+    // pub fn torque_enable(&mut self) {
+    //     self.uart.write_byte(0xFF);
+    //     self.uart.write_byte(0x6f);
+    //     self.uart.write_byte(0x6c);
+    //     self.uart.write_byte(0x61);
+    // }
 }
 
 #[cfg(test)]

@@ -33,6 +33,7 @@ pub trait Pulse2Deg<T> {
 pub mod dxl_consts {
     pub mod f32 {
         pub const HOME_POSITION: f32 = 2048.0;
+        pub const TORQUE_CONST_XL330: f32 = 0.5; // Nm/A
     }
     pub mod f64 {
         pub const HOME_POSITION: f64 = 2048.0;
