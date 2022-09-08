@@ -489,12 +489,18 @@ impl<'a> DynamixelControl<'a> {
         msg.extend(length.to_le_bytes().iter().cloned()); // Set length temporary
         msg.push(Instruction::Write as u8).unwrap();
         msg.extend(address.to_le_bytes().iter().cloned());
-
+        
         for d in data {
             msg.push(*d).unwrap();
         }
-
-        self.send_packet(msg)
+        let packet_len = msg.len() + 2;
+        match self.send_packet(msg) {
+            Ok(_) => {
+                self.set_packet_timeout_length(packet_len);
+                Ok(())
+            }
+            Err(e) => Err(e),
+        }
     }
 
     /// TxRx

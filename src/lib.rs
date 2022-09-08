@@ -84,12 +84,6 @@ impl<'a> DynamixelControl<'a> {
         }
     }
 
-    // pub fn torque_enable(&mut self) {
-    //     self.uart.write_byte(0xFF);
-    //     self.uart.write_byte(0x6f);
-    //     self.uart.write_byte(0x6c);
-    //     self.uart.write_byte(0x61);
-    // }
 }
 
 #[cfg(test)]
@@ -268,16 +262,6 @@ mod tests {
         fn get_current_time(&self) -> Duration {
             self.time_elasped.clone().into_inner()
         }
-    }
-
-    #[test]
-    #[ignore]
-    fn torque_enable_xc330() {
-        let mut mock_uart = MockSerial::new();
-        let mock_clock = MockClock::new();
-        let mut dxl = DynamixelControl::new(&mut mock_uart, &mock_clock, 115200);
-        dxl.torque_enable();
-        assert_eq!(*mock_uart.rx_buf, [0xFF, 0x6f, 0x6c, 0x61]);
     }
 
     #[test]
