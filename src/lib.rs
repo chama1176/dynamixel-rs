@@ -20,7 +20,9 @@ use instruction::Instruction;
 
 pub trait Interface {
     fn write_byte(&mut self, data: u8);
+    fn write_bytes(&mut self, data: &[u8]);
     fn read_byte(&mut self) -> Option<u8>;
+    fn read_bytes(&mut self, buf: &mut [u8]) -> Option<usize>;
 }
 pub trait Clock {
     fn get_current_time(&self) -> Duration;
@@ -110,11 +112,8 @@ mod tests {
                 tx_buf: Deque::<u8, 256>::new(),
             }
         }
-    }
-    impl crate::Interface for MockSerial {
-        fn write_byte(&mut self, data: u8) {
-            self.rx_buf.push(data).unwrap();
 
+        fn set_test_tx_data(&mut self) {
             // For test ping
             if self.tx_buf.len() == 0
                 && self.rx_buf.len() > 8
@@ -237,9 +236,33 @@ mod tests {
                     self.tx_buf.push_back(data).unwrap();
                 }
             }
+
         }
+
+    }
+    impl crate::Interface for MockSerial {
+        fn write_byte(&mut self, data: u8) {
+            self.rx_buf.push(data).unwrap();
+            self.set_test_tx_data();
+        }
+
+        fn write_bytes(&mut self, data: &[u8]){
+            for d in data {
+                self.rx_buf.push(*d).unwrap();
+            }
+            self.set_test_tx_data();
+        }
+
         fn read_byte(&mut self) -> Option<u8> {
             self.tx_buf.pop_front()
+        }
+
+        fn read_bytes(&mut self, buf: &mut [u8]) -> Option<usize>{
+            let m = core::cmp::min(self.tx_buf.len(), buf.len());
+            for i in 0..m {
+                buf[i] = self.tx_buf.pop_front().unwrap();
+            }
+            Some(m)
         }
     }
 
@@ -491,7 +514,7 @@ mod tests {
         // let mock_clock = MockClock::new();
         // let mut dxl = DynamixelControl::new(&mut mock_uart, &mock_clock, 115200);
         // dxl.set_operating_mode(1,  OperatingMode::CurrentBasedPositionControlMode).unwrap();
-        let x = 10.0 - dxl_consts::f32::HOME_POSITION;
+        let _x = 10.0 - dxl_consts::f32::HOME_POSITION;
     }
 
 }

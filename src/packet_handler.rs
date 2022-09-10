@@ -131,9 +131,10 @@ impl<'a> DynamixelControl<'a> {
         msg.extend(self.calc_crc_value(&msg).to_le_bytes().iter().cloned());
 
         self.clear_port();
-        for m in msg {
-            self.uart.write_byte(m);
-        }
+        self.uart.write_bytes(&msg);
+        // for m in msg {
+        //     self.uart.write_byte(m);
+        // }
 
         Ok(())
     }
@@ -829,8 +830,22 @@ mod tests {
         fn write_byte(&mut self, data: u8) {
             self.rx_buf.push(data).unwrap();
         }
+        fn write_bytes(&mut self, data: &[u8]){
+            for d in data {
+                self.rx_buf.push(*d).unwrap();
+            }
+        }
+
         fn read_byte(&mut self) -> Option<u8> {
             self.tx_buf.pop_front()
+        }
+
+        fn read_bytes(&mut self, buf: &mut [u8]) -> Option<usize>{
+            let m = core::cmp::min(self.tx_buf.len(), buf.len());
+            for i in 0..m {
+                buf[i] = self.tx_buf.pop_front().unwrap();
+            }
+            Some(m)
         }
     }
 
