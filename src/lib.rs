@@ -23,6 +23,7 @@ pub trait Interface {
     fn write_bytes(&mut self, data: &[u8]);
     fn read_byte(&mut self) -> Option<u8>;
     fn read_bytes(&mut self, buf: &mut [u8]) -> Option<usize>;
+    fn clear_read_buf(&mut self);
 }
 pub trait Clock {
     fn get_current_time(&self) -> Duration;
@@ -263,6 +264,9 @@ mod tests {
                 buf[i] = self.tx_buf.pop_front().unwrap();
             }
             Some(m)
+        }
+        fn clear_read_buf(&mut self) {
+            self.tx_buf.clear();
         }
     }
 

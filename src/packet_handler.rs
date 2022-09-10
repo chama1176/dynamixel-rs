@@ -792,14 +792,15 @@ impl<'a> DynamixelControl<'a> {
     }
 
     fn clear_port(&mut self) {
-        loop {
-            match self.uart.read_byte() {
-                None => {
-                    break;
-                }
-                Some(_) => {}
-            }    
-        }
+        self.uart.clear_read_buf();
+        // loop {
+        //     match self.uart.read_byte() {
+        //         None => {
+        //             break;
+        //         }
+        //         Some(_) => {}
+        //     }    
+        // }
     }
 }
 
@@ -846,6 +847,9 @@ mod tests {
                 buf[i] = self.tx_buf.pop_front().unwrap();
             }
             Some(m)
+        }
+        fn clear_read_buf(&mut self) {
+            self.tx_buf.clear();
         }
     }
 
