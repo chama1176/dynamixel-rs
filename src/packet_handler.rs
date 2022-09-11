@@ -143,18 +143,27 @@ impl<'a> DynamixelControl<'a> {
         let result;
         let mut wait_length = 11; // minimum length (HEADER0 HEADER1 HEADER2 RESERVED ID LENGTH_L LENGTH_H INST ERROR CRC16_L CRC16_H)
         let mut msg = Vec::<u8, MAX_PACKET_LEN>::new(); // VecDeque is not implemented in heapless.
+        let mut res = Vec::<u8, MAX_PACKET_LEN>::new();
 
         loop {
-            while msg.len() < wait_length {
-                match self.uart.read_byte() {
-                    None => {
-                        break;
-                    }
-                    Some(res) => {
-                        msg.push(res).unwrap();
-                    }
-                }
+            res.resize(wait_length - msg.len(), 0).unwrap();
+            match self.uart.read_bytes(&mut *res) {
+                None =>{},
+                Some(readlen)=> {
+                    msg.extend(res[0..readlen].iter().cloned());
+                },
             }
+            
+            // while msg.len() < wait_length {
+            //     match self.uart.read_byte() {
+            //         None => {
+            //             break;
+            //         }
+            //         Some(res) => {
+            //             msg.push(res).unwrap();
+            //         }
+            //     }
+            // }
 
             if msg.len() >= wait_length {
                 let mut idx = 0;

@@ -81,6 +81,7 @@ impl<'a> DynamixelControl<'a> {
     pub fn set_goal_current(&mut self, id: u8, current: f32) -> Result<(), CommunicationResult> {
         let data: u16 = u16::from_le_bytes(((current /  ControlTable::GoalCurrent.to_unit() * 1000.0) as i16).to_le_bytes());
         let result = self.write_2byte(id, ControlTable::GoalCurrent, data);
+        // let result = self.send_2byte_write_packet(id, ControlTable::GoalCurrent, data);
         match result {
             Ok(_) => Ok(()),
             Err(e) => Err(e),
