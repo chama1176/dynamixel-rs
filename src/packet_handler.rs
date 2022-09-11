@@ -384,9 +384,10 @@ impl<'a> DynamixelControl<'a> {
         }
 
         let mut data = Vec::<u8, MAX_PACKET_LEN>::new();
-        for i in 0..data_length as usize {
-            data.push(status[Packet::Error.to_pos() + 1 + i]).unwrap();
-        }
+        // for i in 0..data_length as usize {
+        //     data.push(status[Packet::Error.to_pos() + 1 + i]).unwrap();
+        // }
+        data.extend(status[(Packet::Error.to_pos() + 1)..(Packet::Error.to_pos() + 1 + data_length as usize)].iter().cloned());
 
         Ok(data)
     }
@@ -500,9 +501,10 @@ impl<'a> DynamixelControl<'a> {
         msg.push(Instruction::Write as u8).unwrap();
         msg.extend(address.to_le_bytes().iter().cloned());
         
-        for d in data {
-            msg.push(*d).unwrap();
-        }
+        // for d in data {
+        //     msg.push(*d).unwrap();
+        // }
+        msg.extend(data.iter().cloned());
         let packet_len = msg.len() + 2;
         match self.send_packet(msg) {
             Ok(_) => {
