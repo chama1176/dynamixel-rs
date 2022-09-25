@@ -245,6 +245,20 @@ mod tests {
                     self.tx_buf.push_back(data).unwrap();
                 }
             }
+            // For test sync read
+            if self.tx_buf.len() == 0
+                && self.rx_buf.len() > 8
+                && self.rx_buf[Packet::Instruction.to_pos()] == Instruction::SyncRead.into()
+            {
+                let res = [
+                    0xFF, 0xFF, 0xFD, 0x00, 0x01, 0x08, 0x00, 0x55, 0x00, 0xA6, 0x00, 0x00, 0x00,
+                    0x8C, 0xC0, 0xFF, 0xFF, 0xFD, 0x00, 0x02, 0x08, 0x00, 0x55, 0x00, 0x1F, 0x08,
+                    0x00, 0x00, 0xBA, 0xBE,
+                ];
+                for data in res {
+                    self.tx_buf.push_back(data).unwrap();
+                }
+            }
         }
     }
     impl crate::Interface for MockSerial {
@@ -506,6 +520,9 @@ mod tests {
             ControlTable::PresentPosition,
             ControlTable::PresentPosition.to_size(),
         );
+        assert_eq!(result.is_ok(), true);
+        let result1 = dxl.receive_4byte_read_packet(1);
+        let result2 = dxl.receive_4byte_read_packet(2);
         assert_eq!(
             *mock_uart.rx_buf,
             [
@@ -513,7 +530,10 @@ mod tests {
                 0xCE, 0xFA
             ]
         );
-        assert_eq!(result.is_ok(), true);
+        assert_eq!(result1.is_ok(), true);
+        assert_eq!(result1, Ok(0x000000A6));
+        assert_eq!(result2.is_ok(), true);
+        assert_eq!(result2, Ok(0x0000081F));
     }
 
     #[test]
