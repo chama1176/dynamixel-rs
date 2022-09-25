@@ -2,13 +2,13 @@
 //! This crate is for control dynamixel.
 //!
 #![allow(unused_imports)]
-pub mod control_table;
 pub mod control_data;
+pub mod control_table;
+mod instruction;
 pub mod packet_handler;
 pub mod utils;
-mod instruction;
-pub use control_table::ControlTable;
 pub use control_data::*;
+pub use control_table::ControlTable;
 pub use packet_handler::CommunicationResult;
 use packet_handler::MAX_PACKET_LEN;
 pub use utils::DegRad;
@@ -50,11 +50,16 @@ impl<'a> DynamixelControl<'a> {
             packet_start_time: Duration::new(0, 0),
             packet_timeout: Duration::new(0, 0),
             baudrate: baudrate,
-            tx_time_per_byte: ((1_000_000.0 * 8.0 + (baudrate as f32 - 1.0)) / baudrate as f32) as u64,
+            tx_time_per_byte: ((1_000_000.0 * 8.0 + (baudrate as f32 - 1.0)) / baudrate as f32)
+                as u64,
         }
     }
 
-    pub fn set_operating_mode(&mut self, id: u8, data: OperatingMode) -> Result<(), CommunicationResult> {
+    pub fn set_operating_mode(
+        &mut self,
+        id: u8,
+        data: OperatingMode,
+    ) -> Result<(), CommunicationResult> {
         self.write_1byte(id, ControlTable::OperatingMode, data.to_value())
     }
 
@@ -70,16 +75,19 @@ impl<'a> DynamixelControl<'a> {
     pub fn get_present_position(&mut self, id: u8) -> Result<f32, CommunicationResult> {
         let result = self.read_4byte(id, ControlTable::PresentPosition);
         match result {
-            Ok(v) => {
-                Ok((v as f32 * ControlTable::PresentPosition.to_unit() - dxl_consts::f32::HOME_POSITION).pulse2deg().deg2rad())
-            },
+            Ok(v) => Ok((v as f32 * ControlTable::PresentPosition.to_unit()
+                - dxl_consts::f32::HOME_POSITION)
+                .pulse2deg()
+                .deg2rad()),
             Err(e) => Err(e),
-        } 
+        }
     }
 
     /// current: A
     pub fn set_goal_current(&mut self, id: u8, current: f32) -> Result<(), CommunicationResult> {
-        let data: u16 = u16::from_le_bytes(((current /  ControlTable::GoalCurrent.to_unit() * 1000.0) as i16).to_le_bytes());
+        let data: u16 = u16::from_le_bytes(
+            ((current / ControlTable::GoalCurrent.to_unit() * 1000.0) as i16).to_le_bytes(),
+        );
         let result = self.write_2byte(id, ControlTable::GoalCurrent, data);
         // let result = self.send_2byte_write_packet(id, ControlTable::GoalCurrent, data);
         match result {
@@ -87,17 +95,16 @@ impl<'a> DynamixelControl<'a> {
             Err(e) => Err(e),
         }
     }
-
 }
 
 #[cfg(test)]
 mod tests {
+    use crate::control_data::*;
     use crate::packet_handler::CommunicationResult;
     use crate::packet_handler::Packet;
     use crate::ControlTable;
     use crate::DynamixelControl;
     use crate::Instruction;
-    use crate::control_data::*;
     use core::cell::RefCell;
     use core::time::Duration;
     use heapless::Deque;
@@ -238,9 +245,7 @@ mod tests {
                     self.tx_buf.push_back(data).unwrap();
                 }
             }
-
         }
-
     }
     impl crate::Interface for MockSerial {
         fn write_byte(&mut self, data: u8) {
@@ -248,7 +253,7 @@ mod tests {
             self.set_test_tx_data();
         }
 
-        fn write_bytes(&mut self, data: &[u8]){
+        fn write_bytes(&mut self, data: &[u8]) {
             for d in data {
                 self.rx_buf.push(*d).unwrap();
             }
@@ -259,7 +264,7 @@ mod tests {
             self.tx_buf.pop_front()
         }
 
-        fn read_bytes(&mut self, buf: &mut [u8]) -> Option<usize>{
+        fn read_bytes(&mut self, buf: &mut [u8]) -> Option<usize> {
             let m = core::cmp::min(self.tx_buf.len(), buf.len());
             for i in 0..m {
                 buf[i] = self.tx_buf.pop_front().unwrap();
@@ -361,7 +366,7 @@ mod tests {
         assert_eq!(result.is_ok(), true);
         assert_eq!(result, Ok(0x000000A6));
     }
-    
+
     #[test]
     fn read_2byte() {
         // ID1(XC330-T181) : Current Limit(38, 0x0026, 2[byte]) = 888(0x0378)
@@ -451,13 +456,13 @@ mod tests {
         let mut mock_uart = MockSerial::new();
         let mock_clock = MockClock::new();
         let mut dxl = DynamixelControl::new(&mut mock_uart, &mock_clock, 115200);
-        dxl.send_1byte_write_packet(1, ControlTable::TemperatureLimit, 80).unwrap();
-        
+        dxl.send_1byte_write_packet(1, ControlTable::TemperatureLimit, 80)
+            .unwrap();
+
         let result = dxl.read_4byte(1, ControlTable::PresentPosition);
         assert_eq!(result.is_ok(), true);
         assert_eq!(result, Ok(0x000000A6));
     }
-
 
     #[test]
     fn factory_reset() {
@@ -492,6 +497,7 @@ mod tests {
     #[test]
     fn sync_read_tx() {
         // ID1(XM430-W210) : Present Position(132, 0x0084, 4[byte]) = 166(0x000000A6)
+        // ID2(XM430-W210) : Present Position(132, 0x0084, 4[byte]) = 2,079(0x0000081F)
         let mut mock_uart = MockSerial::new();
         let mock_clock = MockClock::new();
         let mut dxl = DynamixelControl::new(&mut mock_uart, &mock_clock, 115200);
@@ -502,7 +508,33 @@ mod tests {
         );
         assert_eq!(
             *mock_uart.rx_buf,
-            [0xFF, 0xFF, 0xFD, 0x00, 0xFE, 0x09, 0x00, 0x82, 0x84, 0x00, 0x04, 0x00, 0x01, 0x02, 0xCE, 0xFA]
+            [
+                0xFF, 0xFF, 0xFD, 0x00, 0xFE, 0x09, 0x00, 0x82, 0x84, 0x00, 0x04, 0x00, 0x01, 0x02,
+                0xCE, 0xFA
+            ]
+        );
+        assert_eq!(result.is_ok(), true);
+    }
+
+    #[test]
+    fn sync_write_tx() {
+        // ID1(XM430-W210) : Write 150(0x00000096) to Goal Position(116, 0x0074, 4[byte])
+        // ID2(XM430-W210) : Write 170(0x000000AA) to Goal Position(116, 0x0074, 4[byte])
+        let mut mock_uart = MockSerial::new();
+        let mock_clock = MockClock::new();
+        let mut dxl = DynamixelControl::new(&mut mock_uart, &mock_clock, 115200);
+        let result = dxl.send_sync_write_packet(
+            &[1, 2],
+            &[0x96, 0x00, 0x00, 0x00, 0xAA, 0x00, 0x00, 0x00],
+            ControlTable::GoalPosition,
+            ControlTable::GoalPosition.to_size(),
+        );
+        assert_eq!(
+            *mock_uart.rx_buf,
+            [
+                0xFF, 0xFF, 0xFD, 0x00, 0xFE, 0x11, 0x00, 0x83, 0x74, 0x00, 0x04, 0x00, 0x01, 0x96,
+                0x00, 0x00, 0x00, 0x02, 0xAA, 0x00, 0x00, 0x00, 0x82, 0x87
+            ]
         );
         assert_eq!(result.is_ok(), true);
     }
@@ -521,5 +553,4 @@ mod tests {
         // dxl.set_operating_mode(1,  OperatingMode::CurrentBasedPositionControlMode).unwrap();
         let _x = 10.0 - dxl_consts::f32::HOME_POSITION;
     }
-
 }
