@@ -113,14 +113,101 @@ impl<'a> DynamixelControl<'a> {
         [0x00; 4] // Header and reserved len
     }
 
-    fn add_stuffing(&mut self) {}
-    fn remove_stuffing(&mut self) {}
+    fn add_stuffing(&mut self, msg: &mut Vec<u8, MAX_PACKET_LEN>) {
+        let packet_length_in =
+            u16::from_le_bytes([msg[Packet::LengthL.to_pos()], msg[Packet::LengthH.to_pos()]]);
+        let mut packet_length_out = packet_length_in;
+
+        if packet_length_in < 8 {
+            // INSTRUCTION, ADDR_L, ADDR_H, CRC16_L, CRC16_H + FF FF FD
+            return;
+        }
+
+        let packet_length_before_crc = packet_length_in - 2;
+        for i in 3..packet_length_before_crc as usize {
+            let check = i + Packet::Instruction.to_pos() - 2;
+            if msg[check + 0] == 0xFF && msg[check + 1] == 0xFF && msg[check + 2] == 0xFD {
+                packet_length_out += 1;
+            }
+        }
+
+        if packet_length_in == packet_length_out {
+            // no stuffing required
+            return;
+        }
+        msg.resize(
+            msg.len() + packet_length_out as usize - packet_length_in as usize,
+            0,
+        )
+        .unwrap();
+
+        let mut out_index = packet_length_out as usize + 6 - 2; // last index before crc
+        let mut in_index = packet_length_in as usize + 6 - 2; // last index before crc
+        while out_index != in_index {
+            if msg[in_index] == 0xFD && msg[in_index - 1] == 0xFF && msg[in_index - 2] == 0xFF {
+                msg[out_index] = 0xFD; // byte stuffing
+                out_index -= 1;
+                if out_index != in_index {
+                    msg[out_index] = msg[in_index]; // FD
+                    out_index -= 1;
+                    in_index -= 1;
+                    msg[out_index] = msg[in_index]; // FF
+                    out_index -= 1;
+                    in_index -= 1;
+                    msg[out_index] = msg[in_index]; // FF
+                    out_index -= 1;
+                    in_index -= 1;
+                }
+            } else {
+                msg[out_index] = msg[in_index];
+                out_index -= 1;
+                in_index -= 1;
+            }
+        }
+
+        msg[Packet::LengthL.to_pos()] = packet_length_out.to_le_bytes()[0];
+        msg[Packet::LengthH.to_pos()] = packet_length_out.to_le_bytes()[1];
+
+        return;
+    }
+
+    fn remove_stuffing(&mut self, msg: &mut Vec<u8, MAX_PACKET_LEN>) {
+        let packet_length_in =
+            u16::from_le_bytes([msg[Packet::LengthL.to_pos()], msg[Packet::LengthH.to_pos()]]);
+        let mut packet_length_out = packet_length_in;
+
+        let mut index = Packet::Instruction.to_pos() as usize;
+        for mut i in 0..(packet_length_in - 2) as usize
+        // except CRC
+        {
+            if msg[i + Packet::Instruction.to_pos()] == 0xFD
+                && msg[i + Packet::Instruction.to_pos() + 1] == 0xFD
+                && msg[i + Packet::Instruction.to_pos() - 1] == 0xFF
+                && msg[i + Packet::Instruction.to_pos() - 2] == 0xFF
+            {
+                // FF FF FD FD
+                packet_length_out -= 1;
+                i += 1;
+            }
+            msg[index] = msg[i + Packet::Instruction.to_pos()];
+            index += 1
+        }
+        msg[index] = msg[Packet::Instruction.to_pos() + packet_length_in as usize - 2];
+        index += 1;
+        msg[index] = msg[Packet::Instruction.to_pos() + packet_length_in as usize - 1];
+        index += 1;
+
+        msg[Packet::LengthL.to_pos()] = packet_length_out.to_le_bytes()[0];
+        msg[Packet::LengthH.to_pos()] = packet_length_out.to_le_bytes()[1];
+    }
 
     /// Set packet without crc.
     pub fn send_packet(
         &mut self,
         mut msg: Vec<u8, MAX_PACKET_LEN>,
     ) -> Result<(), CommunicationResult> {
+        self.add_stuffing(&mut msg);
+
         // make header
         msg[Packet::Header0.to_pos()] = 0xFF;
         msg[Packet::Header1.to_pos()] = 0xFF;
@@ -260,7 +347,7 @@ impl<'a> DynamixelControl<'a> {
         self.is_using = false;
 
         if result == CommunicationResult::Success {
-            // removeStuffing(rxpacket);
+            self.remove_stuffing(&mut msg);
         }
 
         if result == CommunicationResult::Success {
@@ -958,6 +1045,9 @@ mod tests {
         );
         assert_eq!(dxl.calc_crc_value(&msg), 0x0000);
     }
+
+    // 👺there is no add stuffing test example.
+    // 👺there is no remove stuffing test example.
 
     #[test]
     fn clock() {
