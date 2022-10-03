@@ -177,9 +177,9 @@ impl<'a> DynamixelControl<'a> {
         let mut packet_length_out = packet_length_in;
 
         let mut index = Packet::Instruction.to_pos() as usize;
-        for mut i in 0..(packet_length_in - 2) as usize
+        let mut i = 0;
         // except CRC
-        {
+        while i < (packet_length_in - 2) as usize {
             if msg[i + Packet::Instruction.to_pos()] == 0xFD
                 && msg[i + Packet::Instruction.to_pos() + 1] == 0xFD
                 && msg[i + Packet::Instruction.to_pos() - 1] == 0xFF
@@ -190,8 +190,10 @@ impl<'a> DynamixelControl<'a> {
                 i += 1;
             }
             msg[index] = msg[i + Packet::Instruction.to_pos()];
-            index += 1
+            index += 1;
+            i += 1;
         }
+
         msg[index] = msg[Packet::Instruction.to_pos() + packet_length_in as usize - 2];
         index += 1;
         msg[index] = msg[Packet::Instruction.to_pos() + packet_length_in as usize - 1];
@@ -199,6 +201,7 @@ impl<'a> DynamixelControl<'a> {
 
         msg[Packet::LengthL.to_pos()] = packet_length_out.to_le_bytes()[0];
         msg[Packet::LengthH.to_pos()] = packet_length_out.to_le_bytes()[1];
+        msg.resize(index, 0).unwrap();
     }
 
     /// Set packet without crc.
@@ -1046,6 +1049,37 @@ mod tests {
         assert_eq!(dxl.calc_crc_value(&msg), 0x0000);
     }
 
+    #[test]
+    fn stuffing() {
+        let mut mock_uart = MockSerial::new();
+        let mock_clock = MockClock::new();
+        let mut dxl = DynamixelControl::new(&mut mock_uart, &mock_clock, 115200);
+        let mut msg = Vec::<u8, MAX_PACKET_LEN>::new();
+        msg.extend(
+            [
+                0xFF, 0xFF, 0xFD, 0x00, 0x01, 0x0B, 0x00, 0x03, 0xE0, 0x00, 0xFF, 0xFF, 0xFF, 0xFF,
+                0xFD, 0x01, 0x00, 0x00,
+            ]
+            .iter()
+            .cloned(),
+        );
+        dxl.add_stuffing(&mut msg);
+        assert_eq!(
+            *msg,
+            [
+                0xFF, 0xFF, 0xFD, 0x00, 0x01, 0x0C, 0x00, 0x03, 0xE0, 0x00, 0xFF, 0xFF, 0xFF, 0xFF,
+                0xFD, 0xFD, 0x01, 0x00, 0x00
+            ]
+        );
+        dxl.remove_stuffing(&mut msg);
+        assert_eq!(
+            *msg,
+            [
+                0xFF, 0xFF, 0xFD, 0x00, 0x01, 0x0B, 0x00, 0x03, 0xE0, 0x00, 0xFF, 0xFF, 0xFF, 0xFF,
+                0xFD, 0x01, 0x00, 0x00
+            ]
+        );
+    }
     // 👺there is no add stuffing test example.
     // 👺there is no remove stuffing test example.
 
