@@ -1080,8 +1080,6 @@ mod tests {
             ]
         );
     }
-    // 👺there is no add stuffing test example.
-    // 👺there is no remove stuffing test example.
 
     #[test]
     fn clock() {
