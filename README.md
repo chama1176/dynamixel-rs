@@ -21,8 +21,14 @@ classDiagram
 
 ```
 
-## How to 
+## Get started
 For generate documentation.
 ```bash
 cargo doc --open
+```
+
+### For Linux
+
+```
+sudo gpasswd -a ユーザ名 dialout
 ```
