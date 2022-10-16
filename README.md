@@ -32,3 +32,11 @@ cargo doc --open
 ```
 sudo gpasswd -a ユーザ名 dialout
 ```
+
+```
+sudo chmod 666 /dev/ttyUSB0
+```
+
+```
+cat /sys/bus/usb-serial/devices/ttyUSB0/latency_timer
+```
