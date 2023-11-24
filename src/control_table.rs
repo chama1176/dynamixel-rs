@@ -1,4 +1,8 @@
-#[cfg(any(feature = "xm430", feature = "xc330",))]
+pub enum DynamixelModel{
+    XM430_W350,
+    XC330_T181,
+}
+
 #[allow(dead_code)]
 pub enum ControlTable {
     ModelNumber,
@@ -297,7 +301,7 @@ impl ControlTable {
         }
     }
 
-    pub fn to_unit(&self) -> f32 {
+    pub fn to_unit(&self, model: &DynamixelModel) -> f32 {
         match self {
             ControlTable::ModelNumber => 1.0,
             ControlTable::ModelInformation => 1.0,
@@ -345,7 +349,12 @@ impl ControlTable {
             ControlTable::Moving => 1.0,
             ControlTable::MovingStatus => 1.0,
             ControlTable::PresentPWM => 0.113,
-            ControlTable::PresentCurrent => 1.0,
+            ControlTable::PresentCurrent => {
+                match model{
+                    DynamixelModel::XM430_W350 => 2.69,
+                    DynamixelModel::XC330_T181 => 1.0,
+                }
+            },
             ControlTable::PresentVelocity => 0.229,
             ControlTable::PresentPosition => 1.0,
             ControlTable::VelocityTrajectory => 0.229,
@@ -417,6 +426,6 @@ mod tests {
     fn to_unit_xc330() {
         let name = ControlTable::ModelNumber;
         assert_eq!(name.to_unit(), 1.0);
-        assert_eq!(ControlTable::PresentPWM.to_unit(), 0.113);
+        assert_eq!(ControlTable::PresentPWM.to_unit(DynamixelModel::XC330_T181), 0.113);
     }
 }
