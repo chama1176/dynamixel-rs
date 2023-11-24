@@ -426,6 +426,6 @@ mod tests {
     fn to_unit_xc330() {
         let name = ControlTable::ModelNumber;
         assert_eq!(name.to_unit(), 1.0);
-        assert_eq!(ControlTable::PresentPWM.to_unit(DynamixelModel::Xc330T181), 0.113);
+        assert_eq!(ControlTable::PresentPWM.to_unit(&DynamixelModel::Xc330T181), 0.113);
     }
 }
