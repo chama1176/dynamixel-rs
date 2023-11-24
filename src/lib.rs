@@ -9,6 +9,7 @@ pub mod packet_handler;
 pub mod utils;
 pub use control_data::*;
 pub use control_table::ControlTable;
+pub use control_table::DynamixelModel;
 pub use packet_handler::CommunicationResult;
 use packet_handler::MAX_PACKET_LEN;
 pub use utils::DegRad;
@@ -75,7 +76,7 @@ impl<'a> DynamixelControl<'a> {
     pub fn get_present_position(&mut self, id: u8) -> Result<f32, CommunicationResult> {
         let result = self.read_4byte(id, ControlTable::PresentPosition);
         match result {
-            Ok(v) => Ok((v as f32 * ControlTable::PresentPosition.to_unit()
+            Ok(v) => Ok((v as f32 * ControlTable::PresentPosition.to_unit(&DynamixelModel::Xc330T181)
                 - dxl_consts::f32::HOME_POSITION)
                 .pulse2deg()
                 .deg2rad()),
@@ -86,7 +87,7 @@ impl<'a> DynamixelControl<'a> {
     /// current: A
     pub fn set_goal_current(&mut self, id: u8, current: f32) -> Result<(), CommunicationResult> {
         let data: u16 = u16::from_le_bytes(
-            ((current / ControlTable::GoalCurrent.to_unit() * 1000.0) as i16).to_le_bytes(),
+            ((current / ControlTable::GoalCurrent.to_unit(&DynamixelModel::Xc330T181) * 1000.0) as i16).to_le_bytes(),
         );
         let result = self.write_2byte(id, ControlTable::GoalCurrent, data);
         // let result = self.send_2byte_write_packet(id, ControlTable::GoalCurrent, data);
@@ -103,6 +104,7 @@ mod tests {
     use crate::packet_handler::CommunicationResult;
     use crate::packet_handler::Packet;
     use crate::ControlTable;
+    use crate::DynamixelModel;
     use crate::DynamixelControl;
     use crate::Instruction;
     use core::cell::RefCell;
