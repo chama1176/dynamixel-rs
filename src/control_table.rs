@@ -409,6 +409,8 @@ impl ControlTable {
 #[cfg(test)]
 mod tests {
     use crate::control_table::ControlTable;
+    use crate::control_table::DynamixelModel;
+    
     #[test]
     fn to_address_xc330() {
         let name = ControlTable::ModelNumber;
@@ -425,7 +427,7 @@ mod tests {
     #[test]
     fn to_unit_xc330() {
         let name = ControlTable::ModelNumber;
-        assert_eq!(name.to_unit(), 1.0);
+        assert_eq!(name.to_unit(&DynamixelModel::Xc330T181), 1.0);
         assert_eq!(ControlTable::PresentPWM.to_unit(&DynamixelModel::Xc330T181), 0.113);
     }
 }
