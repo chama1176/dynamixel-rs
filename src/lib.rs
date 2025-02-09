@@ -141,6 +141,21 @@ mod tests {
                     self.tx_buf.push_back(data).unwrap();
                 }
             }
+            // For test read(8byte)
+            if self.tx_buf.len() == 0
+                && self.rx_buf.len() > 8
+                && self.rx_buf[Packet::Instruction.to_pos()] == Instruction::Read.into()
+                && self.rx_buf[Packet::Id.to_pos()] == 0x01
+                && self.rx_buf[Packet::Parameter0.to_pos()] == 0x00
+            {
+                let res = [
+                    0xFF, 0xFF, 0xFD, 0x00, 0x01, 0x0C, 0x00, 0x55, 0x00, 0x06, 0x04, 0x00, 0x00, 0x00,
+                    0x00, 0x00, 0x01, 0x96, 0x0C,
+                ];
+                for data in res {
+                    self.tx_buf.push_back(data).unwrap();
+                }
+            }
             // For test read(4byte)
             if self.tx_buf.len() == 0
                 && self.rx_buf.len() > 8
@@ -366,6 +381,25 @@ mod tests {
         );
         assert_eq!(result.is_ok(), true);
         assert_eq!(result.unwrap(), (0x000000A6 as u32).to_le_bytes());
+    }
+
+    #[test]
+    fn read_long() {
+        // Read 8byte
+        let mut mock_uart = MockSerial::new();
+        let mock_clock = MockClock::new();
+        let mut dxl = DynamixelControl::new(&mut mock_uart, &mock_clock, 115200);
+        let result = dxl.read(
+            1,
+            ControlTable::ModelNumber,
+            8,
+        );
+        assert_eq!(
+            *mock_uart.rx_buf,
+            [0xFF, 0xFF, 0xFD, 0x00, 0x01, 0x07, 0x00, 0x02, 0x00, 0x00, 0x08, 0x00, 0x21, 0x6d]
+        );
+        assert_eq!(result.is_ok(), true);
+        assert_eq!(result.unwrap(), (0x0100000000000406 as u64).to_le_bytes());
     }
 
     #[test]
