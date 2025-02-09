@@ -6,7 +6,7 @@ use core::result::Result;
 use core::time::Duration;
 use heapless::Vec;
 
-pub const MAX_PACKET_LEN: usize = 128;
+pub const MAX_PACKET_LEN: usize = 256;
 pub const BROADCAST_ID: u8 = 0xFE;
 
 #[allow(dead_code)]
