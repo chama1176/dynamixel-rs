@@ -287,6 +287,14 @@ impl<'a> DynamixelControl<'a> {
                         msg.truncate(msg.len() - 1);
                         continue;
                     }
+                    let declared_length = u16::from_le_bytes([
+                        msg[Packet::LengthL.to_pos()],
+                        msg[Packet::LengthH.to_pos()],
+                    ]) as usize;
+                    if !(4..=MAX_PACKET_LEN - 7).contains(&declared_length) {
+                        result = CommunicationResult::RxCorrupt;
+                        break;
+                    }
                     // re-calculate the exact length of the rx packet
                     if wait_length
                         != u16::from_le_bytes([
@@ -388,6 +396,11 @@ impl<'a> DynamixelControl<'a> {
         if status[Packet::Id.to_pos()] != id {
             return Err(CommunicationResult::SomethingWentWrong);
         }
+        // A valid-length response may still carry a device error or alert.
+        if status[Packet::Error.to_pos()] != 0 {
+            return Err(CommunicationResult::SomethingWentWrong);
+        }
+
         // data length check
         if u16::from_le_bytes([
             status[Packet::LengthL.to_pos()],
@@ -460,6 +473,11 @@ impl<'a> DynamixelControl<'a> {
 
         // id check
         if status[Packet::Id.to_pos()] != id {
+            return Err(CommunicationResult::SomethingWentWrong);
+        }
+
+        // A valid-length response may still carry a device error or alert.
+        if status[Packet::Error.to_pos()] != 0 {
             return Err(CommunicationResult::SomethingWentWrong);
         }
 
@@ -632,6 +650,11 @@ impl<'a> DynamixelControl<'a> {
         if status[Packet::Id.to_pos()] != id {
             return Err(CommunicationResult::SomethingWentWrong);
         }
+        // A valid-length response may still carry a device error or alert.
+        if status[Packet::Error.to_pos()] != 0 {
+            return Err(CommunicationResult::SomethingWentWrong);
+        }
+
         // data length check
         if u16::from_le_bytes([
             status[Packet::LengthL.to_pos()],
@@ -731,6 +754,11 @@ impl<'a> DynamixelControl<'a> {
         if status[Packet::Id.to_pos()] != id {
             return Err(CommunicationResult::SomethingWentWrong);
         }
+        // A valid-length response may still carry a device error or alert.
+        if status[Packet::Error.to_pos()] != 0 {
+            return Err(CommunicationResult::SomethingWentWrong);
+        }
+
         // data length check
         if u16::from_le_bytes([
             status[Packet::LengthL.to_pos()],
@@ -778,6 +806,11 @@ impl<'a> DynamixelControl<'a> {
         if status[Packet::Id.to_pos()] != id {
             return Err(CommunicationResult::SomethingWentWrong);
         }
+        // A valid-length response may still carry a device error or alert.
+        if status[Packet::Error.to_pos()] != 0 {
+            return Err(CommunicationResult::SomethingWentWrong);
+        }
+
         // data length check
         if u16::from_le_bytes([
             status[Packet::LengthL.to_pos()],
@@ -1118,5 +1151,52 @@ mod tests {
         let mut dxl = DynamixelControl::new(&mut mock_uart, &mock_clock, 115200);
         dxl.clear_port();
         assert_eq!(mock_uart.tx_buf.is_empty(), true);
+    }
+    #[test]
+    fn read_rejects_status_error_with_valid_payload_and_crc() {
+        let mut uart = MockSerial::new();
+        let clock = MockClock::new();
+        let mut dxl = DynamixelControl::new(&mut uart, &clock, 1_000_000);
+        // CRC-correct one-byte READ response containing the Alert bit.
+        let mut packet = Vec::<u8, MAX_PACKET_LEN>::new();
+        packet.extend([0xff, 0xff, 0xfd, 0, 1, 5, 0, 0x55, 0x80, 42]);
+        let crc = dxl.calc_crc_value(&packet);
+        packet.extend(crc.to_le_bytes());
+        for byte in packet {
+            uart.tx_buf.push_back(byte).unwrap();
+        }
+        let mut dxl = DynamixelControl::new(&mut uart, &clock, 1_000_000);
+        assert_eq!(
+            dxl.receive_read_packet(1, 1),
+            Err(super::CommunicationResult::SomethingWentWrong)
+        );
+    }
+
+    #[test]
+    fn malformed_lengths_return_error_instead_of_panicking() {
+        for length in [0u16, 3, 250, 256] {
+            let mut uart = MockSerial::new();
+            let clock = MockClock::new();
+            for byte in [
+                0xff,
+                0xff,
+                0xfd,
+                0,
+                1,
+                length as u8,
+                (length >> 8) as u8,
+                0x55,
+                0,
+                0,
+                0,
+            ] {
+                uart.tx_buf.push_back(byte).unwrap();
+            }
+            let mut dxl = DynamixelControl::new(&mut uart, &clock, 1_000_000);
+            assert_eq!(
+                dxl.receive_packet(),
+                Err(super::CommunicationResult::RxCorrupt)
+            );
+        }
     }
 }
